@@ -43,6 +43,8 @@ jobs:
 
       - name: 编译归档（跳过签名）
         run: |
+          set -o pipefail
+          mkdir -p build
           xcodebuild archive \
             -project SkySense.xcodeproj \
             -scheme SkySense \
@@ -52,9 +54,26 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            DEVELOPMENT_TEAM=""
+            DEVELOPMENT_TEAM="" 2>&1 | tee build/xcodebuild.log
           # 校验归档产物确实存在
           test -d build/SkySense.xcarchive/Products/Applications/SkySense.app
+
+      - name: 提取编译错误为注释（仅失败时）
+        if: failure()
+        run: |
+          if [ -f build/xcodebuild.log ]; then
+            grep -E "(error|fatal error):" build/xcodebuild.log | sort -u | head -40 | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+          fi
+
+      - name: 上传编译日志（仅失败时）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: build/xcodebuild.log
+          retention-days: 7
 
       - name: 打包为未签名 IPA
         run: |
