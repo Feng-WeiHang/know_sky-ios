@@ -1,0 +1,64 @@
+name: Build iOS IPA (unsigned)
+
+# 每次推送到 main 分支或手动触发时，在云端 macOS 上构建识天 iOS 版
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: 构建未签名 IPA
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 选择 Xcode 15
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+
+      - name: 安装 XcodeGen
+        run: brew install xcodegen
+
+      - name: 生成 Xcode 工程
+        run: xcodegen generate
+
+      - name: 编译归档（跳过签名）
+        run: |
+          xcodebuild archive \
+            -project SkySense.xcodeproj \
+            -scheme SkySense \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/SkySense.xcarchive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
+            | xcbeautify --renderer github-actions || true
+          # 校验归档产物确实存在（xcbeautify 管道可能掩盖失败）
+          test -d build/SkySense.xcarchive/Products/Applications/SkySense.app
+
+      - name: 打包为未签名 IPA
+        run: |
+          mkdir -p build/Payload
+          cp -R build/SkySense.xcarchive/Products/Applications/SkySense.app build/Payload/
+          cd build
+          zip -qry SkySense-unsigned.ipa Payload
+          ls -lh SkySense-unsigned.ipa
+
+      - name: 上传 IPA 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: SkySense-unsigned-ipa
+          path: build/SkySense-unsigned.ipa
+          retention-days: 30
+
+      - name: 上传 xcarchive（备用，供本地签名）
+        uses: actions/upload-artifact@v4
+        with:
+          name: SkySense-xcarchive
+          path: build/SkySense.xcarchive
+          retention-days: 30

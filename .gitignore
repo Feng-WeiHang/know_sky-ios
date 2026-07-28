@@ -1,0 +1,7 @@
+# Xcode / macOS
+SkySense.xcodeproj/
+build/
+DerivedData/
+*.xcarchive
+.DS_Store
+xcuserdata/

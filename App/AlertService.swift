@@ -1,0 +1,172 @@
+import Foundation
+import UserNotifications
+
+/// 恶劣天气预警服务：分析逐小时数据并推送本地通知
+/// 对应 Android AlertCheckWorker + AlertNotificationHelper
+final class AlertService {
+
+    static let shared = AlertService()
+    private let store = AppStore.shared
+
+    /// 遍历所有城市，检测未来 1-6 小时是否出现极端天气
+    func checkAllCities() async {
+        let settings = store.getSettings()
+        guard settings.alertEnabled else { return }
+
+        let cities = store.getCities()
+        guard !cities.isEmpty else { return }
+
+        store.cleanExpiredAlertKeys()
+        let recentKeys = store.getRecentAlertKeys()
+        let language = settings.language
+
+        for city in cities {
+            guard let forecast = try? await WeatherAPI.getForecast(
+                latitude: city.latitude, longitude: city.longitude,
+                hourly: "precipitation,weather_code,wind_speed_10m,visibility"
+            ), let hourly = forecast.hourly else { continue }
+
+            let alerts = analyzeHourlyData(city: city, hourly: hourly, minSeverity: settings.alertMinSeverity)
+
+            for alert in alerts {
+                // 去重：同一城市同一类型 2 小时内不重复推送
+                let key = "\(alert.cityId)_\(alert.alertType.rawValue)"
+                guard !recentKeys.contains(key) else { continue }
+                await sendNotification(alert, language: language)
+                store.addAlertKey(key)
+            }
+        }
+    }
+
+    // MARK: - 逐小时数据分析（阈值与 Android 完全一致）
+
+    func analyzeHourlyData(city: CityInfo, hourly: HourlyWeather, minSeverity: AlertSeverity) -> [WeatherAlert] {
+        var alerts: [WeatherAlert] = []
+        let now = Date()
+
+        // 找到当前小时对应的索引
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        var startIndex = -1
+        for (i, t) in hourly.time.enumerated() {
+            if let time = fmt.date(from: t), time >= now { startIndex = i; break }
+        }
+        guard startIndex >= 0 else { return [] }
+
+        // 检查未来 6 小时
+        let endIndex = min(startIndex + 6, hourly.time.count - 1)
+
+        for i in startIndex...endIndex {
+            let hoursAhead = i - startIndex + 1
+            let timeStr = FormatUtils.formatIsoTime(hourly.time[i])
+
+            // 1. 风速
+            let windSpeed = hourly.windSpeed?.indices.contains(i) == true ? hourly.windSpeed![i] : 0.0
+            if let a = checkWind(city, windSpeed, hoursAhead, timeStr, minSeverity) { alerts.append(a) }
+
+            // 2. 降水量
+            let precipitation = hourly.precipitation?.indices.contains(i) == true ? hourly.precipitation![i] : 0.0
+            if let a = checkRain(city, precipitation, hoursAhead, timeStr, minSeverity) { alerts.append(a) }
+
+            // 3. 能见度
+            if let vis = hourly.visibility?.indices.contains(i) == true ? hourly.visibility![i] : nil,
+               let a = checkFog(city, vis, hoursAhead, timeStr, minSeverity) { alerts.append(a) }
+
+            // 4. WMO 天气代码
+            let code = hourly.weatherCode?.indices.contains(i) == true ? hourly.weatherCode![i] : 0
+            if let a = checkWeatherCode(city, code, hoursAhead, timeStr, minSeverity) { alerts.append(a) }
+        }
+
+        // 每种类型只保留最早的一个
+        var seen = Set<AlertType>()
+        return alerts.filter { seen.insert($0.alertType).inserted }
+    }
+
+    private func checkWind(_ city: CityInfo, _ windSpeed: Double, _ hoursAhead: Int, _ timeStr: String, _ minSeverity: AlertSeverity) -> WeatherAlert? {
+        let severity: AlertSeverity
+        switch windSpeed {
+        case AlertThresholds.windExtreme...: severity = .extreme
+        case AlertThresholds.windSevere...: severity = .severe
+        case AlertThresholds.windWarning...: severity = .warning
+        default: return nil
+        }
+        guard severity.priority >= minSeverity.priority else { return nil }
+        return WeatherAlert(
+            cityId: city.id, cityName: city.name, alertType: .strongWind, severity: severity,
+            message: "预计\(hoursAhead)小时后出现强风天气，风力 \(Int(windSpeed)) km/h",
+            detail: "风力：\(Int(windSpeed)) km/h", detectedAt: Date(), expectedTime: timeStr
+        )
+    }
+
+    private func checkRain(_ city: CityInfo, _ precipitation: Double, _ hoursAhead: Int, _ timeStr: String, _ minSeverity: AlertSeverity) -> WeatherAlert? {
+        let severity: AlertSeverity
+        switch precipitation {
+        case AlertThresholds.rainExtreme...: severity = .extreme
+        case AlertThresholds.rainSevere...: severity = .severe
+        case AlertThresholds.rainWarning...: severity = .warning
+        default: return nil
+        }
+        guard severity.priority >= minSeverity.priority else { return nil }
+        return WeatherAlert(
+            cityId: city.id, cityName: city.name, alertType: .heavyRain, severity: severity,
+            message: String(format: "预计%d小时后出现暴雨天气，降水量 %.1f mm/h", hoursAhead, precipitation),
+            detail: String(format: "降水量：%.1f mm/h", precipitation), detectedAt: Date(), expectedTime: timeStr
+        )
+    }
+
+    private func checkFog(_ city: CityInfo, _ visibility: Double, _ hoursAhead: Int, _ timeStr: String, _ minSeverity: AlertSeverity) -> WeatherAlert? {
+        let severity: AlertSeverity
+        if visibility < AlertThresholds.visibilityWarning { severity = .severe }
+        else if visibility < AlertThresholds.visibilitySevere { severity = .warning }
+        else { return nil }
+        guard severity.priority >= minSeverity.priority else { return nil }
+        return WeatherAlert(
+            cityId: city.id, cityName: city.name, alertType: .fog, severity: severity,
+            message: "预计\(hoursAhead)小时后能见度极低（\(Int(visibility)) m），可能为沙尘暴或浓雾",
+            detail: "能见度：\(Int(visibility)) m", detectedAt: Date(), expectedTime: timeStr
+        )
+    }
+
+    private func checkWeatherCode(_ city: CityInfo, _ code: Int, _ hoursAhead: Int, _ timeStr: String, _ minSeverity: AlertSeverity) -> WeatherAlert? {
+        guard AlertThresholds.severeWeatherCodes.contains(code) else { return nil }
+        let severity: AlertSeverity = AlertThresholds.extremeWeatherCodes.contains(code) ? .extreme : .severe
+        guard severity.priority >= minSeverity.priority else { return nil }
+
+        let alertType: AlertType
+        let desc: String
+        switch code {
+        case 55, 56, 57: alertType = .freezingRain; desc = "冻雨"
+        case 65, 66, 67: alertType = .heavySnow; desc = "暴风雪"
+        case 77: alertType = .heavySnow; desc = "雪粒"
+        case 85, 86: alertType = .blizzard; desc = "暴风雪"
+        case 95, 96, 99: alertType = .thunderstorm; desc = "雷暴+冰雹"
+        default: return nil
+        }
+        return WeatherAlert(
+            cityId: city.id, cityName: city.name, alertType: alertType, severity: severity,
+            message: "预计\(hoursAhead)小时后出现\(desc)天气，请注意防范",
+            detail: "天气类型：\(desc)", detectedAt: Date(), expectedTime: timeStr
+        )
+    }
+
+    // MARK: - 本地通知
+
+    private func sendNotification(_ alert: WeatherAlert, language: AppLanguage) async {
+        let strings = I18n.of(language)
+        let severityName = strings.severityNames[alert.severity.priority]
+
+        let content = UNMutableNotificationContent()
+        content.title = "⚠️ \(alert.cityName) · \(severityName)"
+        content.body = "\(alert.message)（\(alert.expectedTime)）"
+        content.sound = alert.severity == .extreme ? .defaultCritical : .default
+        content.interruptionLevel = alert.severity == .extreme ? .timeSensitive : .active
+
+        let request = UNNotificationRequest(
+            identifier: "alert_\(alert.cityId)_\(alert.alertType.rawValue)_\(Int(alert.detectedAt.timeIntervalSince1970))",
+            content: content,
+            trigger: nil
+        )
+        try? await UNUserNotificationCenter.current().add(request)
+    }
+}
