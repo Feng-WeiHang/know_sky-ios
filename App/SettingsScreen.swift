@@ -19,7 +19,7 @@ struct SettingsScreen: View {
                 // 显示模式
                 Picker(selection: Binding(
                     get: { settings.themeMode },
-                    set: { updated { $0.themeMode = $1 } }
+                    set: { value in updated { $0.themeMode = value } }
                 )) {
                     ForEach(Array(ThemeMode.allCases.enumerated()), id: \.element) { index, mode in
                         Text(strings.themeModes.indices.contains(index) ? strings.themeModes[index] : mode.rawValue)
@@ -174,7 +174,7 @@ struct SettingsScreen: View {
                 // 语言选择（选定即生效，同步刷新界面与小组件）
                 Picker(selection: Binding(
                     get: { settings.language },
-                    set: { updated { $0.language = $1 } }
+                    set: { value in updated { $0.language = value } }
                 )) {
                     ForEach(AppLanguage.allCases) { lang in
                         Text(lang.displayName).tag(lang)
