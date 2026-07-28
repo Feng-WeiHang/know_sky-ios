@@ -6,24 +6,40 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  HOMEBREW_NO_REQUIRE_TAP_TRUST: "1"
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+
 jobs:
   build:
     name: 构建未签名 IPA
-    runs-on: macos-14
-    timeout-minutes: 30
+    runs-on: macos-latest
+    timeout-minutes: 40
 
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 选择 Xcode 15
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+      - name: 环境信息
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcode-select -p
 
-      - name: 安装 XcodeGen
-        run: brew install xcodegen
+      - name: 安装 XcodeGen（brew 失败则回退官方二进制）
+        run: |
+          if ! brew install xcodegen; then
+            echo "brew 安装失败，改用 GitHub Release 二进制"
+            curl -fsSL -o xcodegen.zip https://github.com/yonaskolb/XcodeGen/releases/latest/download/xcodegen.zip
+            unzip -q xcodegen.zip -d /tmp/xcodegen-dist
+            echo "/tmp/xcodegen-dist/xcodegen/bin" >> "$GITHUB_PATH"
+          fi
 
       - name: 生成 Xcode 工程
-        run: xcodegen generate
+        run: |
+          xcodegen --version
+          xcodegen generate
+          xcodebuild -list -project SkySense.xcodeproj
 
       - name: 编译归档（跳过签名）
         run: |
@@ -36,9 +52,8 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            DEVELOPMENT_TEAM="" \
-            | xcbeautify --renderer github-actions || true
-          # 校验归档产物确实存在（xcbeautify 管道可能掩盖失败）
+            DEVELOPMENT_TEAM=""
+          # 校验归档产物确实存在
           test -d build/SkySense.xcarchive/Products/Applications/SkySense.app
 
       - name: 打包为未签名 IPA
