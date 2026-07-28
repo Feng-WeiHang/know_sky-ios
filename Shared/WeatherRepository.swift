@@ -62,7 +62,9 @@ final class WeatherRepository {
             let city = cities[i]
             if let cached = city.localizedNames?[language.code], !cached.isEmpty { continue }
             // 1) 解析地点 ID（旧数据无 geoId：用中文名搜索 + 经纬度就近匹配补齐）
-            guard let geoId = city.geoId ?? (await resolveGeoId(city)) else { continue }
+            var resolvedId = city.geoId
+            if resolvedId == nil { resolvedId = await resolveGeoId(city) }
+            guard let geoId = resolvedId else { continue }
             // 2) 按 ID 直查目标语言名称（search 接口不支持跨语言，get 接口可以）
             guard let match = try? await WeatherAPI.getCityById(id: geoId, language: geoLang(language)) else {
                 // ID 已解析但取名失败：仅回写 geoId，下次重试免重新搜索
