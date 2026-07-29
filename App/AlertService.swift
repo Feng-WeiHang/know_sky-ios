@@ -23,10 +23,20 @@ final class AlertService {
         for city in cities {
             guard let forecast = try? await WeatherAPI.getForecast(
                 latitude: city.latitude, longitude: city.longitude,
-                hourly: "precipitation,weather_code,wind_speed_10m,visibility"
+                hourly: "precipitation,weather_code,wind_speed_10m,visibility,temperature_2m,precipitation_probability"
             ), let hourly = forecast.hourly else { continue }
 
-            let alerts = analyzeHourlyData(city: city, hourly: hourly, minSeverity: settings.alertMinSeverity)
+            // 中国城市额外拉取中国气象局 CMA GRAPES 模型数据，对天气码类预警做交叉验证
+            var cmaHourly: HourlyWeather? = nil
+            if ClimatePlausibility.isInChina(latitude: city.latitude, longitude: city.longitude) {
+                cmaHourly = try? await WeatherAPI.getForecast(
+                    latitude: city.latitude, longitude: city.longitude,
+                    hourly: "weather_code,temperature_2m",
+                    models: "cma_grapes_global"
+                ).hourly
+            }
+
+            let alerts = analyzeHourlyData(city: city, hourly: hourly, cmaHourly: cmaHourly, settings: settings)
 
             for alert in alerts {
                 // 去重：同一城市同一类型 2 小时内不重复推送
@@ -40,8 +50,9 @@ final class AlertService {
 
     // MARK: - 逐小时数据分析（阈值与 Android 完全一致）
 
-    func analyzeHourlyData(city: CityInfo, hourly: HourlyWeather, minSeverity: AlertSeverity) -> [WeatherAlert] {
+    func analyzeHourlyData(city: CityInfo, hourly: HourlyWeather, cmaHourly: HourlyWeather? = nil, settings: AppSettings) -> [WeatherAlert] {
         var alerts: [WeatherAlert] = []
+        let minSeverity = settings.alertMinSeverity
         let now = Date()
 
         // 找到当前小时对应的索引
@@ -73,9 +84,8 @@ final class AlertService {
             if let vis = hourly.visibility?.indices.contains(i) == true ? hourly.visibility![i] : nil,
                let a = checkFog(city, vis, hoursAhead, timeStr, minSeverity) { alerts.append(a) }
 
-            // 4. WMO 天气代码
-            let code = hourly.weatherCode?.indices.contains(i) == true ? hourly.weatherCode![i] : 0
-            if let a = checkWeatherCode(city, code, hoursAhead, timeStr, minSeverity) { alerts.append(a) }
+            // 4. WMO 天气代码（含气候合理性门控与 CMA 交叉验证）
+            if let a = checkWeatherCode(city, hourly: hourly, cmaHourly: cmaHourly, index: i, hoursAhead: hoursAhead, timeStr: timeStr, settings: settings) { alerts.append(a) }
         }
 
         // 每种类型只保留最早的一个
@@ -128,26 +138,44 @@ final class AlertService {
         )
     }
 
-    private func checkWeatherCode(_ city: CityInfo, _ code: Int, _ hoursAhead: Int, _ timeStr: String, _ minSeverity: AlertSeverity) -> WeatherAlert? {
-        guard AlertThresholds.severeWeatherCodes.contains(code) else { return nil }
-        let severity: AlertSeverity = AlertThresholds.extremeWeatherCodes.contains(code) ? .extreme : .severe
-        guard severity.priority >= minSeverity.priority else { return nil }
+    private func checkWeatherCode(_ city: CityInfo, hourly: HourlyWeather, cmaHourly: HourlyWeather?, index: Int, hoursAhead: Int, timeStr: String, settings: AppSettings) -> WeatherAlert? {
+        guard let rawCode = hourly.weatherCode?.indices.contains(index) == true ? hourly.weatherCode![index] : nil else { return nil }
 
-        let alertType: AlertType
-        let desc: String
-        switch code {
-        case 55, 56, 57: alertType = .freezingRain; desc = "冻雨"
-        case 65, 66, 67: alertType = .heavySnow; desc = "暴风雪"
-        case 77: alertType = .heavySnow; desc = "雪粒"
-        case 85, 86: alertType = .blizzard; desc = "暴风雪"
-        case 95, 96, 99: alertType = .thunderstorm; desc = "雷暴+冰雹"
-        default: return nil
-        }
+        // open-meteo 冰雹码（96/99）仅中欧地区有效，其他地区降级为纯雷暴（95）
+        let code = ClimatePlausibility.normalizeHailCode(rawCode, latitude: city.latitude, longitude: city.longitude)
+        guard AlertThresholds.severeWeatherCodes.contains(code) else { return nil }
+
+        guard let (alertType, severity) = AlertThresholds.codeAlertSpec(code) else { return nil }
+        guard severity.priority >= settings.alertMinSeverity.priority else { return nil }
+
+        // 温度门控：气温明显高于冰点时剔除冻雨/降雪类误报
+        let temperature = hourly.temperature?.indices.contains(index) == true ? hourly.temperature![index] : nil
+        guard ClimatePlausibility.isPlausible(code, temperatureC: temperature) else { return nil }
+
+        // 概率门控：降水概率过低视为模型噪声
+        if let probability = hourly.precipitationProbability?.indices.contains(index) == true ? hourly.precipitationProbability![index] : nil,
+           probability < ClimatePlausibility.minPrecipProbability { return nil }
+
+        // CMA 中国气象局模型交叉验证：两个模型都预报降水类天气才告警
+        if let cmaHourly, !crossValidateWithCma(cmaHourly, time: hourly.time.indices.contains(index) ? hourly.time[index] : nil) { return nil }
+
+        // 描述改用 I18n 精确文案（95=雷暴、96=雷暴+小冰雹、99=雷暴+大冰雹），随设置语言
+        let desc = I18n.weatherDesc(code, settings.language)
+
         return WeatherAlert(
             cityId: city.id, cityName: city.name, alertType: alertType, severity: severity,
             message: "预计\(hoursAhead)小时后出现\(desc)天气，请注意防范",
             detail: "天气类型：\(desc)", detectedAt: Date(), expectedTime: timeStr
         )
+    }
+
+    /// 用 CMA GRAPES 模型交叉验证：同一时刻 CMA 也预报降水类天气（code >= 51）才确认
+    /// 时间对不齐或 CMA 无数据时不阻断（退回单模型 + 门控）
+    private func crossValidateWithCma(_ cmaHourly: HourlyWeather, time: String?) -> Bool {
+        guard let time, let idx = cmaHourly.time.firstIndex(of: time),
+              let cmaCode = cmaHourly.weatherCode?.indices.contains(idx) == true ? cmaHourly.weatherCode![idx] : nil
+        else { return true }
+        return cmaCode >= 51
     }
 
     // MARK: - 本地通知

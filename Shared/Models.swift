@@ -224,6 +224,7 @@ struct HourlyWeather: Codable {
     let weatherCode: [Int]?
     let windSpeed: [Double]?
     let visibility: [Double]?
+    var precipitationProbability: [Int]? = nil
 
     enum CodingKeys: String, CodingKey {
         case time
@@ -232,6 +233,7 @@ struct HourlyWeather: Codable {
         case weatherCode = "weather_code"
         case windSpeed = "wind_speed_10m"
         case visibility
+        case precipitationProbability = "precipitation_probability"
     }
 }
 
@@ -368,7 +370,65 @@ enum AlertThresholds {
     static let visibilitySevere = 1000.0
     static let visibilityWarning = 500.0
 
-    // 极端天气 WMO 代码
-    static let severeWeatherCodes: Set<Int> = [55, 56, 57, 65, 66, 67, 77, 85, 86, 95, 96, 99]
-    static let extremeWeatherCodes: Set<Int> = [66, 67, 86, 96, 99]
+    // 极端天气 WMO 代码（语义修正版，参照 WMO 4677 标准，与 Android 一致）
+    static let severeWeatherCodes: Set<Int> = [56, 57, 65, 66, 67, 71, 73, 75, 77, 82, 85, 86, 95, 96, 99]
+    static let extremeWeatherCodes: Set<Int> = [67, 99]
+
+    /// 天气码 -> (预警类型, 预警等级)，逐码精确映射
+    /// 修正旧版把 95 纯雷暴误标为"雷暴+冰雹"、65 大雨误标为"暴风雪"等问题
+    static func codeAlertSpec(_ code: Int) -> (AlertType, AlertSeverity)? {
+        switch code {
+        case 56, 57: return (.freezingRain, .warning)
+        case 66: return (.freezingRain, .severe)
+        case 67: return (.freezingRain, .extreme)
+        case 65: return (.heavyRain, .warning)
+        case 82: return (.heavyRain, .severe)
+        case 71, 73, 77: return (.heavySnow, .warning)
+        case 75: return (.heavySnow, .severe)
+        case 85: return (.blizzard, .warning)
+        case 86: return (.blizzard, .severe)
+        case 95: return (.thunderstorm, .warning)
+        case 96: return (.hail, .severe)
+        case 99: return (.hail, .extreme)
+        default: return nil
+        }
+    }
+}
+
+/// 天气码气候合理性校验（与 Android ClimatePlausibility 一致）
+///
+/// 背景：open-meteo 官方文档注明 "Thunderstorm forecast with hail (96/99)
+/// is only available in Central Europe"——在中欧以外地区，96/99 冰雹码并不可信
+/// （如深圳盛夏 95 纯雷暴曾被误报为冰雹）。
+enum ClimatePlausibility {
+
+    /// 冰雹预报仅在中欧地区有效（open-meteo 官方限制），近似矩形范围
+    static func isCentralEurope(latitude: Double, longitude: Double) -> Bool {
+        (42.0...56.0).contains(latitude) && (2.0...26.0).contains(longitude)
+    }
+
+    /// 冰冻类天气码：冻毛毛雨/冻雨/降雪/雪粒/阵雪
+    static let frozenCodes: Set<Int> = [56, 57, 66, 67, 71, 73, 75, 77, 85, 86]
+
+    /// 冰冻类现象在气温高于此值(°C)时判定为不合理
+    static let frozenMaxTempC = 3.0
+
+    /// 天气码类预警要求的最低降水概率(%)，低于则视为模型噪声不告警
+    static let minPrecipProbability = 50
+
+    /// 归一化冰雹码：非中欧地区 96/99 降级为 95（纯雷暴），其余原样返回
+    static func normalizeHailCode(_ code: Int, latitude: Double, longitude: Double) -> Int {
+        (code == 96 || code == 99) && !isCentralEurope(latitude: latitude, longitude: longitude) ? 95 : code
+    }
+
+    /// 判断天气码在当前气温下是否合理（temperatureC 为 nil 时不做温度门控）
+    static func isPlausible(_ code: Int, temperatureC: Double?) -> Bool {
+        if frozenCodes.contains(code), let t = temperatureC, t > frozenMaxTempC { return false }
+        return true
+    }
+
+    /// 判断坐标是否位于中国范围内（粗略矩形，用于选择 CMA 交叉验证模型）
+    static func isInChina(latitude: Double, longitude: Double) -> Bool {
+        (18.0...54.0).contains(latitude) && (73.0...135.0).contains(longitude)
+    }
 }

@@ -28,9 +28,10 @@ enum WeatherAPI {
 
     static func getForecast(
         latitude: Double, longitude: Double,
-        hourly: String = "temperature_2m,precipitation,weather_code,wind_speed_10m,visibility"
+        hourly: String = "temperature_2m,precipitation,weather_code,wind_speed_10m,visibility",
+        models: String? = nil  // 指定数值模型（如 cma_grapes_global = 中国气象局 GRAPES），nil 时用默认最优模型
     ) async throws -> WeatherResponse {
-        let url = makeURL(base: "https://api.open-meteo.com/", path: "v1/forecast", query: [
+        var query: [String: String] = [
             "latitude": String(latitude),
             "longitude": String(longitude),
             "current": "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,visibility,dew_point_2m",
@@ -38,7 +39,9 @@ enum WeatherAPI {
             "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max",
             "timezone": "auto",
             "forecast_days": "6"
-        ])
+        ]
+        if let models { query["models"] = models }
+        let url = makeURL(base: "https://api.open-meteo.com/", path: "v1/forecast", query: query)
         return try await fetch(WeatherResponse.self, url: url)
     }
 
