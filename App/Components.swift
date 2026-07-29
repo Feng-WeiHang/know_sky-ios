@@ -17,21 +17,42 @@ enum WeatherEffect {
     }
 }
 
+/// 一天中的时段（决定晴/云天空的底色与景物，对应 Android DayPhase）
+enum DayPhase {
+    case dawn, morning, noon, afternoon, sunset, night
+}
+
 /// 背景配色与明暗判定（供前景文字/时钟自适应对比度）
 enum WeatherBackdrop {
 
     static func currentHour() -> Int { Calendar.current.component(.hour, from: Date()) }
+
+    /// 小时 → 时段：5-6黎明 / 7-10清晨 / 11-14晌午 / 15-17午后 / 18-19日落 / 20-4夜晚
+    static func phaseOf(_ hour: Int) -> DayPhase {
+        switch hour {
+        case 5...6: return .dawn
+        case 7...10: return .morning
+        case 11...14: return .noon
+        case 15...17: return .afternoon
+        case 18...19: return .sunset
+        default: return .night
+        }
+    }
 
     /// 背景是否为深色（前景应使用浅色文字）
     static func isDark(_ weatherCode: Int?, hour: Int = currentHour()) -> Bool {
         switch WeatherEffect.of(weatherCode) {
         case .rain, .storm: return true
         case .sand, .snow: return false
-        case .cloud: return !(5...18).contains(hour)
+        case .cloud:
+            switch phaseOf(hour) {
+            case .dawn, .sunset, .night: return true
+            default: return false
+            }
         }
     }
 
-    /// 时段 × 天气 的渐变底色
+    /// 时段 × 天气 的渐变底色（上→下）
     static func colors(_ weatherCode: Int?, hour: Int = currentHour()) -> [Color] {
         switch WeatherEffect.of(weatherCode) {
         case .rain: return [Color(hex: 0xFF37474F), Color(hex: 0xFF546E7A), Color(hex: 0xFF78909C)]
@@ -39,10 +60,19 @@ enum WeatherBackdrop {
         case .snow: return [Color(hex: 0xFFCFD8DC), Color(hex: 0xFFE3F2FD), Color(hex: 0xFFF5F9FF)]
         case .sand: return [Color(hex: 0xFFC9A24B), Color(hex: 0xFFD9B96E), Color(hex: 0xFFE8D5A3)]
         case .cloud:
-            switch hour {
-            case 5...8, 17...18: return [Color(hex: 0xFFFF9E80), Color(hex: 0xFFFFC1A6), Color(hex: 0xFFFFE0CC)] // 晨曦橙粉
-            case 9...16: return [Color(hex: 0xFF4FA8E8), Color(hex: 0xFF7BC2F2), Color(hex: 0xFFB3DDFA)]         // 午后明亮蓝
-            default: return [Color(hex: 0xFF0D1B3E), Color(hex: 0xFF1A2B5C), Color(hex: 0xFF2C3E70)]             // 夜晚深蓝
+            switch phaseOf(hour) {
+            // 黎明：夜色未退，地平线泛起鱼肚白与橙晕
+            case .dawn: return [Color(hex: 0xFF1B2A52), Color(hex: 0xFF4A548C), Color(hex: 0xFFE8956D)]
+            // 清晨：朝阳初升，天青透亮带暖金
+            case .morning: return [Color(hex: 0xFF6DB3E8), Color(hex: 0xFFA3D3F5), Color(hex: 0xFFFFE3B8)]
+            // 晌午：阳光明媚，通透湛蓝
+            case .noon: return [Color(hex: 0xFF2E8FE0), Color(hex: 0xFF5FB0F0), Color(hex: 0xFFAEDCFB)]
+            // 午后：日光西斜，蓝中透暖
+            case .afternoon: return [Color(hex: 0xFF5B9FD4), Color(hex: 0xFF9CC8E8), Color(hex: 0xFFF7D9A8)]
+            // 日落：漫天橙红晚霞渐入暮紫
+            case .sunset: return [Color(hex: 0xFF43335F), Color(hex: 0xFFB3556A), Color(hex: 0xFFF29C5A)]
+            // 夜晚：深蓝星空
+            case .night: return [Color(hex: 0xFF0D1B3E), Color(hex: 0xFF1A2B5C), Color(hex: 0xFF2C3E70)]
             }
         }
     }
@@ -69,24 +99,27 @@ private struct Particle {
 }
 
 /// 主界面动态天气背景：
-/// 底色随时段渐变（清晨橙粉 / 午后明亮蓝 / 夜晚深蓝星空），
+/// 底色随时段实时变换（黎明 / 清晨 / 晌午 / 午后 / 日落 / 夜晚 六档），
+/// 并绘制对应天空景物（朝阳 / 高悬烈日 / 落日余晖 / 月亮星空）；
 /// 粒子动效随天气切换（漂浮云彩 / 雨丝 / 雪花 / 沙尘横扫 / 雷暴闪烁）。
+/// 时段直接取自 TimelineView 帧时间，跨时段自动切换，无需重进页面。
 struct DynamicWeatherBackgroundView: View {
     let weatherCode: Int?
 
     private static let particles = (0..<48).map { Particle(index: $0) }
 
     var body: some View {
-        let hour = WeatherBackdrop.currentHour()
         let effect = WeatherEffect.of(weatherCode)
-        let colors = WeatherBackdrop.colors(weatherCode, hour: hour)
-        let night = !(5...18).contains(hour)
 
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
             Canvas { ctx, size in
                 let time = timeline.date.timeIntervalSinceReferenceDate
                 let t = (time.truncatingRemainder(dividingBy: 12)) / 12          // 主进度：粒子循环
                 let flash = (time.truncatingRemainder(dividingBy: 3.6)) / 3.6    // 雷暴闪烁
+                // 时段随帧时间实时计算，跨时段无感切换
+                let hour = Calendar.current.component(.hour, from: timeline.date)
+                let phase = WeatherBackdrop.phaseOf(hour)
+                let colors = WeatherBackdrop.colors(weatherCode, hour: hour)
 
                 // 时段渐变底色
                 ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .linearGradient(
@@ -97,8 +130,24 @@ struct DynamicWeatherBackgroundView: View {
 
                 switch effect {
                 case .cloud:
-                    if night { drawStars(&ctx, size, t) }
-                    drawClouds(&ctx, size, t, night: night, count: 5)
+                    // 天空景物：随时段绘制太阳/月亮/星空
+                    switch phase {
+                    case .dawn:
+                        drawStars(&ctx, size, t, dim: 0.45)
+                        drawSun(&ctx, size, cx: 0.22, cy: 0.88, r: 0.085, glow: 0.9, tint: Color(hex: 0xFFFFB74D), t: t)
+                    case .morning:
+                        drawSun(&ctx, size, cx: 0.20, cy: 0.30, r: 0.075, glow: 0.55, tint: Color(hex: 0xFFFFE082), t: t)
+                    case .noon:
+                        drawSun(&ctx, size, cx: 0.50, cy: 0.16, r: 0.085, glow: 0.75, tint: Color(hex: 0xFFFFF59D), t: t, rays: true)
+                    case .afternoon:
+                        drawSun(&ctx, size, cx: 0.76, cy: 0.32, r: 0.075, glow: 0.55, tint: Color(hex: 0xFFFFD180), t: t)
+                    case .sunset:
+                        drawSun(&ctx, size, cx: 0.80, cy: 0.86, r: 0.10, glow: 1.0, tint: Color(hex: 0xFFFF8A65), t: t)
+                    case .night:
+                        drawStars(&ctx, size, t, dim: 1)
+                        drawMoon(&ctx, size, t)
+                    }
+                    drawClouds(&ctx, size, t, night: phase == .night, count: 5)
                 case .rain:
                     drawClouds(&ctx, size, t, night: true, count: 3)
                     drawRain(&ctx, size, t)
@@ -123,6 +172,56 @@ struct DynamicWeatherBackgroundView: View {
         .ignoresSafeArea(edges: .top)
     }
 
+    /// 太阳：光晕呼吸 + 可选放射光芒（晌午烈日）
+    private func drawSun(_ ctx: inout GraphicsContext, _ size: CGSize,
+                         cx: Double, cy: Double, r: Double,
+                         glow: Double, tint: Color, t: Double, rays: Bool = false) {
+        let center = CGPoint(x: cx * size.width, y: cy * size.height)
+        let radius = r * size.width
+        let breathe = 1 + 0.06 * sin(t * 6.28 * 2)
+        // 三层光晕由外向内
+        for (mul, alpha) in [(2.6 * breathe, 0.10), (1.9 * breathe, 0.18), (1.4, 0.30)] {
+            let rr = radius * mul
+            ctx.fill(Path(ellipseIn: CGRect(x: center.x - rr, y: center.y - rr, width: rr * 2, height: rr * 2)),
+                     with: .color(tint.opacity(alpha * glow)))
+        }
+        // 日轮
+        ctx.fill(Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)),
+                 with: .radialGradient(Gradient(colors: [.white.opacity(0.95), tint]),
+                                       center: center, startRadius: 0, endRadius: radius))
+        // 晌午放射光芒（缓慢旋转）
+        if rays {
+            let rot = t * 0.5
+            for i in 0..<12 {
+                let a = (Double(i * 30) + rot * 360) * .pi / 180
+                let inner = radius * 1.55
+                let outer = radius * (2.0 + 0.15 * sin((t * 4 + Double(i)) * 6.28))
+                var path = Path()
+                path.move(to: CGPoint(x: center.x + inner * cos(a), y: center.y + inner * sin(a)))
+                path.addLine(to: CGPoint(x: center.x + outer * cos(a), y: center.y + outer * sin(a)))
+                ctx.stroke(path, with: .color(tint.opacity(0.45)),
+                           style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+            }
+        }
+    }
+
+    /// 弯月：主圆叠夜色遮罩圆形成月牙，附柔和光晕
+    private func drawMoon(_ ctx: inout GraphicsContext, _ size: CGSize, _ t: Double) {
+        let center = CGPoint(x: size.width * 0.78, y: size.height * 0.22)
+        let radius = size.width * 0.06
+        let breathe = 1 + 0.05 * sin(t * 6.28 * 2)
+        let halo = radius * 2.2 * breathe
+        ctx.fill(Path(ellipseIn: CGRect(x: center.x - halo, y: center.y - halo, width: halo * 2, height: halo * 2)),
+                 with: .color(Color(hex: 0xFFFFF9C4).opacity(0.12)))
+        ctx.fill(Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)),
+                 with: .color(Color(hex: 0xFFFFF9C4).opacity(0.95)))
+        // 遮罩圆偏移形成月牙（用背景夜色盖掉一角）
+        let mr = radius * 0.92
+        let mc = CGPoint(x: center.x - radius * 0.42, y: center.y - radius * 0.30)
+        ctx.fill(Path(ellipseIn: CGRect(x: mc.x - mr, y: mc.y - mr, width: mr * 2, height: mr * 2)),
+                 with: .color(Color(hex: 0xFF16254E)))
+    }
+
     /// 微动漂浮云彩：多圆组合云团缓慢横移
     private func drawClouds(_ ctx: inout GraphicsContext, _ size: CGSize, _ t: Double, night: Bool, count: Int) {
         let cloudColor = Color.white.opacity(night ? 0.10 : 0.55)
@@ -141,14 +240,14 @@ struct DynamicWeatherBackgroundView: View {
         }
     }
 
-    /// 夜空星星：轻微闪烁
-    private func drawStars(_ ctx: inout GraphicsContext, _ size: CGSize, _ t: Double) {
+    /// 夜空星星：轻微闪烁（dim 控制整体亮度，黎明残星更暗淡）
+    private func drawStars(_ ctx: inout GraphicsContext, _ size: CGSize, _ t: Double, dim: Double = 1) {
         for p in Self.particles.dropFirst(5).prefix(30) {
             let alpha = 0.3 + 0.7 * ((sin((t * 6.28 + p.phase * 6.28) * (1 + p.speed)) + 1) / 2)
             let r = 1.2 + p.size * 2
             let c = CGPoint(x: p.x * size.width, y: p.y * size.height * 0.7)
             ctx.fill(Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)),
-                     with: .color(.white.opacity(alpha * 0.8)))
+                     with: .color(.white.opacity(alpha * 0.8 * dim)))
         }
     }
 
@@ -201,6 +300,7 @@ struct AnalogClockView: View {
     var size: CGFloat = 200
     var primaryColor: Color = .accentColor
     var textColor: Color = .primary
+    var faceColor: Color = .clear
     var showDigitalTime = true
     var language: AppLanguage = .simplifiedChinese
 
@@ -218,6 +318,14 @@ struct AnalogClockView: View {
                     let cy = canvasSize.height / 2
                     let radius = min(cx, cy) * 0.92
                     let center = CGPoint(x: cx, y: cy)
+
+                    // 磨砂表盘底色（与动态背景拉开色差，保证指针/刻度清晰）
+                    if faceColor != .clear {
+                        ctx.fill(
+                            Path(ellipseIn: CGRect(x: cx - radius - 2, y: cy - radius - 2,
+                                                   width: (radius + 2) * 2, height: (radius + 2) * 2)),
+                            with: .color(faceColor))
+                    }
 
                     // 外圈
                     ctx.stroke(

@@ -8,14 +8,17 @@ struct HomeScreen: View {
 
     @State private var showSettings = false
     @State private var showCitySearch = false
+    // 时段驱动的前景配色：每 30 秒校准一次，跨时段自动刷新对比色
+    @State private var backdropHour = WeatherBackdrop.currentHour()
+    private let hourTimer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     var body: some View {
         let strings = viewModel.strings
         let language = viewModel.settings.language
         let weatherCode = viewModel.selectedWeather?.current?.weatherCode
-        // 背景明暗决定上半部前景配色（保证对比度）
-        let darkBackdrop = WeatherBackdrop.isDark(weatherCode)
-        let onBackdrop: Color = darkBackdrop ? .white : Color(hex: 0xFF243447)
+        // 背景明暗决定上半部前景配色（随时段实时刷新，保证对比度）
+        let darkBackdrop = WeatherBackdrop.isDark(weatherCode, hour: backdropHour)
+        let onBackdrop: Color = darkBackdrop ? .white : Color(hex: 0xFF1A2740)
 
         NavigationStack {
             ScrollView {
@@ -67,12 +70,12 @@ struct HomeScreen: View {
                                 )
                             }
 
-                            // 指针时钟（颜色随背景明暗自适配）
+                            // 指针时钟（磨砂表盘 + 前景色随背景明暗自适配，与底板拉开鲜明色差）
                             AnalogClockView(
                                 size: 200,
-                                primaryColor: darkBackdrop ? Color(hex: 0xFF8FD0FF)
-                                    : AppTheme.palette(viewModel.settings.themeColorIndex).primary,
-                                textColor: onBackdrop,
+                                primaryColor: darkBackdrop ? Color(hex: 0xFF9BD8FF) : Color(hex: 0xFF0D47A1),
+                                textColor: darkBackdrop ? .white : Color(hex: 0xFF102038),
+                                faceColor: darkBackdrop ? Color(hex: 0x66101E3C) : Color(hex: 0xB3FFFFFF),
                                 language: language
                             )
                             .padding(.top, 8)
@@ -142,6 +145,10 @@ struct HomeScreen: View {
                 CitySearchScreen()
             }
             .toolbar(.hidden, for: .navigationBar)
+            .onReceive(hourTimer) { _ in
+                let h = WeatherBackdrop.currentHour()
+                if h != backdropHour { backdropHour = h }
+            }
         }
     }
 }
