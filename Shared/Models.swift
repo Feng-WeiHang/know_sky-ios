@@ -422,6 +422,46 @@ enum ClimatePlausibility {
         (code == 96 || code == 99) && !isCentralEurope(latitude: latitude, longitude: longitude) ? 95 : code
     }
 
+    /// 归一化整份预报响应（current/hourly/daily 的天气码），供展示/小组件链路统一使用。
+    ///
+    /// 背景：open-meteo 的 daily.weather_code 取全天“最严重”小时码，只要任意
+    /// 1 小时被误标 96/99，整天就会显示“冰雹”，导致多城市大面积误报。
+    /// 地区判定用响应自带的模型格点经纬度。
+    static func normalizeResponse(_ response: WeatherResponse) -> WeatherResponse {
+        if isCentralEurope(latitude: response.latitude, longitude: response.longitude) { return response }
+        func fix(_ code: Int) -> Int { (code == 96 || code == 99) ? 95 : code }
+
+        var current = response.current
+        if let c = current, c.weatherCode != fix(c.weatherCode) {
+            current = CurrentWeather(
+                time: c.time, temperature: c.temperature, humidity: c.humidity,
+                apparentTemperature: c.apparentTemperature, weatherCode: fix(c.weatherCode),
+                windSpeed: c.windSpeed, windDirection: c.windDirection,
+                pressure: c.pressure, visibility: c.visibility, dewPoint: c.dewPoint
+            )
+        }
+        var hourly = response.hourly
+        if let h = hourly, let codes = h.weatherCode, codes.contains(where: { $0 == 96 || $0 == 99 }) {
+            hourly = HourlyWeather(
+                time: h.time, temperature: h.temperature, precipitation: h.precipitation,
+                weatherCode: codes.map(fix), windSpeed: h.windSpeed, visibility: h.visibility,
+                precipitationProbability: h.precipitationProbability
+            )
+        }
+        var daily = response.daily
+        if let d = daily, d.weatherCode.contains(where: { $0 == 96 || $0 == 99 }) {
+            daily = DailyWeather(
+                time: d.time, weatherCode: d.weatherCode.map(fix),
+                temperatureMax: d.temperatureMax, temperatureMin: d.temperatureMin,
+                precipitationSum: d.precipitationSum, precipitationProbabilityMax: d.precipitationProbabilityMax
+            )
+        }
+        return WeatherResponse(
+            latitude: response.latitude, longitude: response.longitude,
+            timezone: response.timezone, current: current, hourly: hourly, daily: daily
+        )
+    }
+
     /// 判断天气码在当前气温下是否合理（temperatureC 为 nil 时不做温度门控）
     static func isPlausible(_ code: Int, temperatureC: Double?) -> Bool {
         if frozenCodes.contains(code), let t = temperatureC, t > frozenMaxTempC { return false }

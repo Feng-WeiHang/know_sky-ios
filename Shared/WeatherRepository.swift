@@ -11,7 +11,10 @@ final class WeatherRepository {
 
     /// 获取指定城市的完整天气数据（空气质量失败不阻断）
     func fetchCityWeather(_ city: CityInfo) async throws -> CityWeatherData {
-        let forecast = try await WeatherAPI.getForecast(latitude: city.latitude, longitude: city.longitude)
+        // 入口处统一归一化冰雹码（非中欧 96/99→95），展示/预报/小组件全链路生效
+        let forecast = ClimatePlausibility.normalizeResponse(
+            try await WeatherAPI.getForecast(latitude: city.latitude, longitude: city.longitude)
+        )
         let airQuality = try? await WeatherAPI.getAirQuality(latitude: city.latitude, longitude: city.longitude).current
 
         let data = CityWeatherData(
