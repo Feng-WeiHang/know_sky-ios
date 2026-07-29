@@ -45,9 +45,43 @@ final class WeatherRepository {
 
     // MARK: - 城市搜索
 
-    /// 搜索城市（按当前语言返回结果）
+    /// 搜索城市：内置中国省市区县离线索引优先（1 个字即可模糊匹配），
+    /// 再用 open-meteo 在线结果去重后补充（海外/英文检索场景）。
     func searchCities(_ query: String, language: AppLanguage) async -> [GeocodingResult] {
-        (try? await WeatherAPI.searchCity(name: query, language: geoLang(language))) ?? []
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return [] }
+
+        // 1) 离线索引本地检索（解决在线接口搜不到盘锦/台安/岫岩等小地市的问题）
+        let local = ChinaRegionIndex.search(q)
+
+        // 2) 在线补充：API 2 字符以下无模糊能力，不发请求避免白跑
+        var online: [GeocodingResult] = []
+        if q.count >= 2 {
+            online = (try? await WeatherAPI.searchCity(name: q, language: geoLang(language))) ?? []
+        }
+
+        // 3) 合并去重：坐标接近且名字互为前缀则视为同一地点，保留离线条目
+        let merged = local + online.filter { o in
+            !local.contains { l in
+                abs(l.latitude - o.latitude) < 0.6 &&
+                    abs(l.longitude - o.longitude) < 0.6 &&
+                    isSameName(l.name, o.name)
+            }
+        }
+        return Array(merged.prefix(30))
+    }
+
+    /// 名字去重判定：互为前缀（兼容“盘锦”/“盘锦市”等后缀差异）
+    private func isSameName(_ a: String, _ b: String) -> Bool {
+        guard !a.isEmpty, !b.isEmpty else { return false }
+        func strip(_ s: String) -> String {
+            var s = s
+            for suf in ["市", "县", "区"] where s.hasSuffix(suf) {
+                s = String(s.dropLast(suf.count))
+            }
+            return s
+        }
+        return a.hasPrefix(b) || b.hasPrefix(a) || strip(a) == strip(b)
     }
 
     /// 按目标语言在线补全已添加城市的本地化名称并持久化缓存。

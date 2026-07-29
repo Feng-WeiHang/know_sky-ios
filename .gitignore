@@ -5,3 +5,5 @@ DerivedData/
 *.xcarchive
 .DS_Store
 xcuserdata/
+
+结果/

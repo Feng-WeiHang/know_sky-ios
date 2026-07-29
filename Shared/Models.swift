@@ -173,7 +173,8 @@ struct GeocodingResult: Codable, Identifiable {
             timezone: timezone,
             localizedNames: nil,
             localizedAdmins: nil,
-            geoId: id
+            // 负数 id 为内置离线条目标记，非 open-meteo geoId，不能用于按 ID 取名
+            geoId: id > 0 ? id : nil
         )
     }
 }
