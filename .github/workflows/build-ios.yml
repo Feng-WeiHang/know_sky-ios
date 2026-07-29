@@ -96,3 +96,31 @@ jobs:
           name: SkySense-xcarchive
           path: build/SkySense.xcarchive
           retention-days: 30
+
+      - name: 编译模拟器版（供 Appetize.io 浏览器云端预览）
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project SkySense.xcodeproj \
+            -scheme SkySense \
+            -configuration Release \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/sim \
+            ARCHS="x86_64 arm64" \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" 2>&1 | tee build/xcodebuild-sim.log
+          test -d build/sim/Build/Products/Release-iphonesimulator/SkySense.app
+          cd build/sim/Build/Products/Release-iphonesimulator
+          zip -qry ../../../../SkySense-simulator.zip SkySense.app
+          cd ../../../..
+          ls -lh SkySense-simulator.zip
+
+      - name: 上传模拟器包（直接上传 appetize.io 即可在浏览器运行）
+        uses: actions/upload-artifact@v4
+        with:
+          name: SkySense-simulator-app
+          path: build/SkySense-simulator.zip
+          retention-days: 30
