@@ -24,6 +24,8 @@ struct SkySenseApp: App {
                 .environmentObject(viewModel)
                 .task {
                     await requestNotificationPermission()
+                    // 定位授权：GPS 识别当前城市，AQI/UVI 预警仅针对当前城市推送
+                    LocationService.shared.requestAuthorizationAndLocate()
                     scheduleBackgroundTasks()
                 }
         }
@@ -31,6 +33,8 @@ struct SkySenseApp: App {
             switch phase {
             case .active:
                 Task { await viewModel.refreshIfStale() }
+                // 回到前台时刷新一次位置，保持“当前城市”判定新鲜
+                LocationService.shared.requestAuthorizationAndLocate()
             case .background:
                 scheduleBackgroundTasks()
                 WidgetCenter.shared.reloadAllTimelines()

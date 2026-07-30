@@ -20,6 +20,10 @@ final class AlertService {
         let recentKeys = store.getRecentAlertKeys()
         let language = settings.language
 
+        // GPS 定位当前城市：AQI/UVI 预警仅针对当前所在城市推送
+        // （定位不可用时回退列表首城）
+        let currentCity = LocationService.shared.resolveCurrentCity(from: cities)
+
         for city in cities {
             guard let forecast = try? await WeatherAPI.getForecast(
                 latitude: city.latitude, longitude: city.longitude,
@@ -38,12 +42,15 @@ final class AlertService {
 
             var alerts = analyzeHourlyData(city: city, hourly: hourly, cmaHourly: cmaHourly, settings: settings)
 
-            // 逐小时空气质量/紫外线预警（数据获取失败静默，不阻断天气类预警）
-            let airHourly = try? await WeatherAPI.getAirQuality(
-                latitude: city.latitude, longitude: city.longitude,
-                hourly: "us_aqi,uv_index"
-            ).hourly
-            alerts += analyzeAirHourlyData(city: city, airHourly: airHourly ?? nil, settings: settings)
+            // 天气类预警覆盖所有城市；AQI/UVI 预警只检测 GPS 定位到的当前城市
+            // （数据获取失败静默，不阻断天气类预警）
+            if city.id == currentCity?.id {
+                let airHourly = try? await WeatherAPI.getAirQuality(
+                    latitude: city.latitude, longitude: city.longitude,
+                    hourly: "us_aqi,uv_index"
+                ).hourly
+                alerts += analyzeAirHourlyData(city: city, airHourly: airHourly ?? nil, settings: settings)
+            }
 
             for alert in alerts {
                 // 去重：同一城市同一类型 2 小时内不重复推送

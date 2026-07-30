@@ -36,6 +36,8 @@
 		<string>fetch</string>
 		<string>processing</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>用于识别您当前所在的城市，空气质量与紫外线预警仅针对当前城市推送</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
