@@ -226,6 +226,9 @@ struct HourlyWeather: Codable {
     let windSpeed: [Double]?
     let visibility: [Double]?
     var precipitationProbability: [Int]? = nil
+    // 对流有效位能与冻结高度：用于冰雹物理可行性判定（雹暴需强对流能量且 0°C 层不能过高）
+    var cape: [Double]? = nil
+    var freezingLevelHeight: [Double]? = nil
 
     enum CodingKeys: String, CodingKey {
         case time
@@ -235,6 +238,8 @@ struct HourlyWeather: Codable {
         case windSpeed = "wind_speed_10m"
         case visibility
         case precipitationProbability = "precipitation_probability"
+        case cape
+        case freezingLevelHeight = "freezing_level_height"
     }
 }
 
@@ -281,38 +286,67 @@ struct AirQualityCurrent: Codable {
     let aqi: Double?
     let pm10: Double?
     let pm25: Double?
+    var uvIndex: Double? = nil
 
     enum CodingKeys: String, CodingKey {
         case time
-        case aqi = "european_aqi"
+        case aqi = "us_aqi"
         case pm10
         case pm25 = "pm2_5"
+        case uvIndex = "uv_index"
     }
 }
 
-/// AQI 等级（European AQI）
+/// AQI 等级（us_aqi 量纲 0-500，与 Android AqiLevel 一致）
 enum AqiLevel: Int, CaseIterable {
-    case good = 0, fair, moderate, poor, veryPoor, extremelyPoor
+    case excellent = 0, good, passable, mild, severe, toxic, deadly
 
     var colorHex: UInt32 {
         switch self {
-        case .good: return 0xFF4CAF50
-        case .fair: return 0xFFFFC107
-        case .moderate: return 0xFFFF9800
-        case .poor: return 0xFFF44336
-        case .veryPoor: return 0xFF9C27B0
-        case .extremelyPoor: return 0xFF7B1FA2
+        case .excellent: return 0xFF4CAF50
+        case .good: return 0xFF8BC34A
+        case .passable: return 0xFFFFC107
+        case .mild: return 0xFFFF9800
+        case .severe: return 0xFFF44336
+        case .toxic: return 0xFF9C27B0
+        case .deadly: return 0xFF7B1FA2
         }
     }
 
     static func from(aqi: Int) -> AqiLevel {
         switch aqi {
-        case 0...20: return .good
-        case 21...40: return .fair
-        case 41...60: return .moderate
-        case 61...80: return .poor
-        case 81...100: return .veryPoor
-        default: return .extremelyPoor
+        case 0...30: return .excellent
+        case 31...60: return .good
+        case 61...90: return .passable
+        case 91...150: return .mild
+        case 151...199: return .severe
+        case 200...299: return .toxic
+        default: return .deadly
+        }
+    }
+}
+
+/// 紫外线强度等级（UVI 0-11+，与 Android UvLevel 一致）
+enum UvLevel: Int, CaseIterable {
+    case excellent = 0, passable, scorching, dizzy, deadly
+
+    var colorHex: UInt32 {
+        switch self {
+        case .excellent: return 0xFF4CAF50
+        case .passable: return 0xFFFFC107
+        case .scorching: return 0xFFFF9800
+        case .dizzy: return 0xFFF44336
+        case .deadly: return 0xFF9C27B0
+        }
+    }
+
+    static func from(uvi: Int) -> UvLevel {
+        switch uvi {
+        case 0...2: return .excellent
+        case 3...4: return .passable
+        case 5...6: return .scorching
+        case 7...9: return .dizzy
+        default: return .deadly
         }
     }
 }
@@ -399,13 +433,30 @@ enum AlertThresholds {
 /// 天气码气候合理性校验（与 Android ClimatePlausibility 一致）
 ///
 /// 背景：open-meteo 官方文档注明 "Thunderstorm forecast with hail (96/99)
-/// is only available in Central Europe"——在中欧以外地区，96/99 冰雹码并不可信
-/// （如深圳盛夏 95 纯雷暴曾被误报为冰雹）。
+/// is only available in Central Europe"——在中欧以外地区，96/99 冰雹码
+/// 直接采信会造成大面积误报；但也不能一刀切抹除（中国部分地区在强对流
+/// 条件下确实会出现冰雹，包括寒冷季节的冷涡冰雹）。
+/// 因此对中欧以外地区改用物理条件判定：CAPE（对流有效位能）+ 冻结高度，
+/// 两者同时满足才保留冰雹码，否则降级为纯雷暴（95）。
 enum ClimatePlausibility {
 
-    /// 冰雹预报仅在中欧地区有效（open-meteo 官方限制），近似矩形范围
+    /// 冰雹预报仅在中欧地区默认可信（open-meteo 官方限制），近似矩形范围
     static func isCentralEurope(latitude: Double, longitude: Double) -> Bool {
         (42.0...56.0).contains(latitude) && (2.0...26.0).contains(longitude)
+    }
+
+    /// 冰雹物理门槛：对流有效位能(J/kg)，低于此值大气能量不足以支撑雹暴
+    static let hailMinCape = 800.0
+
+    /// 冰雹物理门槛：冻结高度(m)，0°C 层过高时冰雹在落地前几乎全部融化
+    static let hailMaxFreezingLevelM = 4300.0
+
+    /// 冰雹物理合理性判定（中欧以外地区 96/99 码的保留条件）：
+    /// 需同时满足强对流能量（CAPE ≥ 800 J/kg）与足够低的冻结高度（≤ 4300 m）。
+    /// 任一数据缺失时按不合理处理（保守降级，避免模型伪信号）。
+    static func isHailPlausible(cape: Double?, freezingLevelHeight: Double?) -> Bool {
+        guard let cape, let flh = freezingLevelHeight else { return false }
+        return cape >= hailMinCape && flh <= hailMaxFreezingLevelM
     }
 
     /// 冰冻类天气码：冻毛毛雨/冻雨/降雪/雪粒/阵雪
@@ -417,48 +468,79 @@ enum ClimatePlausibility {
     /// 天气码类预警要求的最低降水概率(%)，低于则视为模型噪声不告警
     static let minPrecipProbability = 50
 
-    /// 归一化冰雹码：非中欧地区 96/99 降级为 95（纯雷暴），其余原样返回
-    static func normalizeHailCode(_ code: Int, latitude: Double, longitude: Double) -> Int {
-        (code == 96 || code == 99) && !isCentralEurope(latitude: latitude, longitude: longitude) ? 95 : code
-    }
-
     /// 归一化整份预报响应（current/hourly/daily 的天气码），供展示/小组件链路统一使用。
     ///
-    /// 背景：open-meteo 的 daily.weather_code 取全天“最严重”小时码，只要任意
-    /// 1 小时被误标 96/99，整天就会显示“冰雹”，导致多城市大面积误报。
+    /// 非中欧地区的 96/99 码逐小时做物理条件判定（CAPE + 冻结高度），
+    /// 通过则保留冰雹展示，未通过降级为 95。daily.weather_code 取全天“最严重”
+    /// 小时码，因此按日回查：当天存在至少 1 个通过判定的冰雹小时才保留。
     /// 地区判定用响应自带的模型格点经纬度。
     static func normalizeResponse(_ response: WeatherResponse) -> WeatherResponse {
         if isCentralEurope(latitude: response.latitude, longitude: response.longitude) { return response }
-        func fix(_ code: Int) -> Int { (code == 96 || code == 99) ? 95 : code }
+        let hourly = response.hourly
+        let codes = hourly?.weatherCode
 
+        // 该小时的 96/99 是否可保留（物理条件判定，数据缺失则保守降级）
+        func hourAllowsHail(_ i: Int) -> Bool {
+            guard let h = hourly else { return false }
+            let cape = (h.cape?.indices.contains(i) == true) ? h.cape![i] : nil
+            let flh = (h.freezingLevelHeight?.indices.contains(i) == true) ? h.freezingLevelHeight![i] : nil
+            return isHailPlausible(cape: cape, freezingLevelHeight: flh)
+        }
+
+        var newHourly = hourly
+        if let h = hourly, let hCodes = codes, hCodes.contains(where: { $0 == 96 || $0 == 99 }) {
+            let fixed = hCodes.enumerated().map { i, c in
+                (c == 96 || c == 99) && !hourAllowsHail(i) ? 95 : c
+            }
+            if fixed != hCodes {
+                newHourly = HourlyWeather(
+                    time: h.time, temperature: h.temperature, precipitation: h.precipitation,
+                    weatherCode: fixed, windSpeed: h.windSpeed, visibility: h.visibility,
+                    precipitationProbability: h.precipitationProbability,
+                    cape: h.cape, freezingLevelHeight: h.freezingLevelHeight
+                )
+            }
+        }
+
+        // 当前天气：取同一小时的判定结果，找不到对应小时则保守降级
         var current = response.current
-        if let c = current, c.weatherCode != fix(c.weatherCode) {
-            current = CurrentWeather(
-                time: c.time, temperature: c.temperature, humidity: c.humidity,
-                apparentTemperature: c.apparentTemperature, weatherCode: fix(c.weatherCode),
-                windSpeed: c.windSpeed, windDirection: c.windDirection,
-                pressure: c.pressure, visibility: c.visibility, dewPoint: c.dewPoint
-            )
+        if let c = current, c.weatherCode == 96 || c.weatherCode == 99 {
+            let hourKey = String(c.time.prefix(13)) // "yyyy-MM-ddTHH"
+            let idx = hourly?.time.firstIndex(where: { $0.hasPrefix(hourKey) })
+            if !(idx != nil && hourAllowsHail(idx!)) {
+                current = CurrentWeather(
+                    time: c.time, temperature: c.temperature, humidity: c.humidity,
+                    apparentTemperature: c.apparentTemperature, weatherCode: 95,
+                    windSpeed: c.windSpeed, windDirection: c.windDirection,
+                    pressure: c.pressure, visibility: c.visibility, dewPoint: c.dewPoint
+                )
+            }
         }
-        var hourly = response.hourly
-        if let h = hourly, let codes = h.weatherCode, codes.contains(where: { $0 == 96 || $0 == 99 }) {
-            hourly = HourlyWeather(
-                time: h.time, temperature: h.temperature, precipitation: h.precipitation,
-                weatherCode: codes.map(fix), windSpeed: h.windSpeed, visibility: h.visibility,
-                precipitationProbability: h.precipitationProbability
-            )
-        }
+
+        // 逐日：当天任意一小时保留冰雹才保留，否则降级
         var daily = response.daily
         if let d = daily, d.weatherCode.contains(where: { $0 == 96 || $0 == 99 }) {
-            daily = DailyWeather(
-                time: d.time, weatherCode: d.weatherCode.map(fix),
-                temperatureMax: d.temperatureMax, temperatureMin: d.temperatureMin,
-                precipitationSum: d.precipitationSum, precipitationProbabilityMax: d.precipitationProbabilityMax
-            )
+            let fixed = d.weatherCode.enumerated().map { i, c -> Int in
+                guard c == 96 || c == 99 else { return c }
+                guard let date = d.time.indices.contains(i) ? d.time[i] : nil,
+                      let hCodes = codes, let h = hourly else { return 95 }
+                let keep = hCodes.indices.contains { j in
+                    (hCodes[j] == 96 || hCodes[j] == 99) &&
+                        h.time.indices.contains(j) && h.time[j].hasPrefix(date) && hourAllowsHail(j)
+                }
+                return keep ? c : 95
+            }
+            if fixed != d.weatherCode {
+                daily = DailyWeather(
+                    time: d.time, weatherCode: fixed,
+                    temperatureMax: d.temperatureMax, temperatureMin: d.temperatureMin,
+                    precipitationSum: d.precipitationSum, precipitationProbabilityMax: d.precipitationProbabilityMax
+                )
+            }
         }
         return WeatherResponse(
             latitude: response.latitude, longitude: response.longitude,
-            timezone: response.timezone, current: current, hourly: hourly, daily: daily
+            timezone: response.timezone, current: current, hourly: newHourly, daily: daily
         )
     }
 

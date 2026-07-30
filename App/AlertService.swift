@@ -23,7 +23,7 @@ final class AlertService {
         for city in cities {
             guard let forecast = try? await WeatherAPI.getForecast(
                 latitude: city.latitude, longitude: city.longitude,
-                hourly: "precipitation,weather_code,wind_speed_10m,visibility,temperature_2m,precipitation_probability"
+                hourly: "precipitation,weather_code,wind_speed_10m,visibility,temperature_2m,precipitation_probability,cape,freezing_level_height"
             ), let hourly = forecast.hourly else { continue }
 
             // 中国城市额外拉取中国气象局 CMA GRAPES 模型数据，对天气码类预警做交叉验证
@@ -141,8 +141,19 @@ final class AlertService {
     private func checkWeatherCode(_ city: CityInfo, hourly: HourlyWeather, cmaHourly: HourlyWeather?, index: Int, hoursAhead: Int, timeStr: String, settings: AppSettings) -> WeatherAlert? {
         guard let rawCode = hourly.weatherCode?.indices.contains(index) == true ? hourly.weatherCode![index] : nil else { return nil }
 
-        // open-meteo 冰雹码（96/99）仅中欧地区有效，其他地区降级为纯雷暴（95）
-        let code = ClimatePlausibility.normalizeHailCode(rawCode, latitude: city.latitude, longitude: city.longitude)
+        // 冰雹码（96/99）科学化判定：非中欧地区不再一刀切降级，而是用
+        // CAPE（对流能量）+ 冻结高度的物理条件判定（寒冬冷涡冰雹同样满足），
+        // 中国城市另叠加 CMA 同小时确认（CMA 有值但 <95 则降级为纯雷暴）
+        var code = rawCode
+        if (rawCode == 96 || rawCode == 99),
+           !ClimatePlausibility.isCentralEurope(latitude: city.latitude, longitude: city.longitude) {
+            let cape = hourly.cape?.indices.contains(index) == true ? hourly.cape![index] : nil
+            let flh = hourly.freezingLevelHeight?.indices.contains(index) == true ? hourly.freezingLevelHeight![index] : nil
+            let cmaCode = cmaCodeAt(cmaHourly, time: hourly.time.indices.contains(index) ? hourly.time[index] : nil)
+            let physicsOk = ClimatePlausibility.isHailPlausible(cape: cape, freezingLevelHeight: flh)
+            let cmaOk = cmaCode == nil || cmaCode! >= 95
+            if !(physicsOk && cmaOk) { code = 95 }
+        }
         guard AlertThresholds.severeWeatherCodes.contains(code) else { return nil }
 
         guard let (alertType, severity) = AlertThresholds.codeAlertSpec(code) else { return nil }
@@ -176,6 +187,12 @@ final class AlertService {
               let cmaCode = cmaHourly.weatherCode?.indices.contains(idx) == true ? cmaHourly.weatherCode![idx] : nil
         else { return true }
         return cmaCode >= 51
+    }
+
+    /// 取 CMA 模型同一时刻的天气码（用于冰雹确认）；CMA 无数据或时间对不齐返回 nil
+    private func cmaCodeAt(_ cmaHourly: HourlyWeather?, time: String?) -> Int? {
+        guard let cmaHourly, let time, let idx = cmaHourly.time.firstIndex(of: time) else { return nil }
+        return cmaHourly.weatherCode?.indices.contains(idx) == true ? cmaHourly.weatherCode![idx] : nil
     }
 
     // MARK: - 本地通知

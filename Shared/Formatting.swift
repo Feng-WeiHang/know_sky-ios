@@ -180,6 +180,9 @@ extension Color {
     /// AQI 等级颜色
     static func aqiColor(_ level: AqiLevel) -> Color { Color(hex: level.colorHex) }
 
+    /// 紫外线等级颜色
+    static func uvColor(_ level: UvLevel) -> Color { Color(hex: level.colorHex) }
+
     /// 预警等级颜色
     static func severityColor(_ s: AlertSeverity) -> Color { Color(hex: s.colorHex) }
 }

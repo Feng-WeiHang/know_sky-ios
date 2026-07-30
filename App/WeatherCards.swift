@@ -135,13 +135,21 @@ struct AqiBarView: View {
                         .background(aqiColor.opacity(0.15), in: Capsule())
                 }
 
+                // 趣味建议文案
+                if strings.aqiAdvices.indices.contains(level.rawValue) {
+                    Text(strings.aqiAdvices[level.rawValue])
+                        .font(.caption)
+                        .foregroundStyle(aqiColor)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
                 // AQI 渐变条
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         Capsule().fill(aqiColor.opacity(0.2))
                         Capsule()
                             .fill(aqiColor)
-                            .frame(width: geo.size.width * min(max(Double(aqi) / 150.0, 0), 1))
+                            .frame(width: geo.size.width * min(max(Double(aqi) / 300.0, 0), 1))
                     }
                 }
                 .frame(height: 8)
@@ -154,6 +162,63 @@ struct AqiBarView: View {
                 }
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+            }
+            .padding(16)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
+        }
+    }
+}
+
+// MARK: - 紫外线强度指示条（对应 Android UvBar，仿 AQI 条，无 PM 行）
+
+struct UvBarView: View {
+    let airQuality: AirQualityCurrent?
+    let strings: Strings
+
+    var body: some View {
+        if let uviValue = airQuality?.uvIndex {
+            let uvi = Int(uviValue.rounded())
+            let level = UvLevel.from(uvi: uvi)
+            let uvColor = Color.uvColor(level)
+
+            VStack(spacing: 12) {
+                HStack {
+                    Text(strings.uvIndex)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    Spacer()
+                    Text("UVI \(uvi)")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundStyle(uvColor)
+                    Text(strings.uvLevels.indices.contains(level.rawValue) ? strings.uvLevels[level.rawValue] : "")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundStyle(uvColor)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(uvColor.opacity(0.15), in: Capsule())
+                }
+
+                // 趣味建议文案
+                if strings.uvAdvices.indices.contains(level.rawValue) {
+                    Text(strings.uvAdvices[level.rawValue])
+                        .font(.caption)
+                        .foregroundStyle(uvColor)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                // UVI 渐变条
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(uvColor.opacity(0.2))
+                        Capsule()
+                            .fill(uvColor)
+                            .frame(width: geo.size.width * min(max(Double(uvi) / 11.0, 0), 1))
+                    }
+                }
+                .frame(height: 8)
             }
             .padding(16)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))

@@ -72,7 +72,11 @@ struct Strings {
     let tempUnitNames: [String]      // 摄氏度/华氏度
     let windUnitNames: [String]      // 公里时/英里时/米秒
     let severityNames: [String]      // 普通/严重/紧急预警
-    let aqiLevels: [String]          // 优/良/中等/较差/很差/极差
+    let aqiLevels: [String]          // 极佳/优良/勉强及格/轻度污染/严重污染/小心中毒/要命了
+    let aqiAdvices: [String]         // AQI 各级趣味建议（与 aqiLevels 一一对应）
+    let uvIndex: String              // 紫外线强度
+    let uvLevels: [String]           // 极佳/勉强/暴晒/晒晕了/要命了
+    let uvAdvices: [String]          // UVI 各级趣味建议（与 uvLevels 一一对应）
     let weatherDescs: [String]       // 26 项天气描述
     let windDirs: [String]           // 北/东北/东/东南/南/西南/西/西北
     let daysOfWeek: [String]         // 周日..周六
@@ -104,7 +108,18 @@ enum I18n {
         tempUnitNames: ["摄氏度", "华氏度"],
         windUnitNames: ["公里/时", "英里/时", "米/秒"],
         severityNames: ["普通预警", "严重预警", "紧急预警"],
-        aqiLevels: ["优", "良", "中等", "较差", "很差", "极差"],
+        aqiLevels: ["极佳", "优良", "勉强及格", "轻度污染", "严重污染", "小心中毒", "要命了"],
+        aqiAdvices: [
+            "快出去！嘻嘻吸天然氧吧！", "多出去走走，拥抱大自然。", "上班去吧，问题不大。",
+            "还敢不戴口罩？！多准备几个吧。", "敢问路在何方？根本看不清！", "没事就别出去了，呛人！",
+            "咳咳，还敢出去？不要命了？！"
+        ],
+        uvIndex: "紫外线强度",
+        uvLevels: ["极佳", "勉强", "暴晒", "晒晕了", "要命了"],
+        uvAdvices: [
+            "还等什么！来一场说走就走的游玩！", "做好防护防晒，快抹防晒霜，穿防晒服。", "加强防晒，多喝水，少运动。",
+            "没啥事别出去浪，小心中暑！", "快藏起来，一定要好好活着！"
+        ],
         weatherDescs: [
             "晴", "大部晴朗", "局部多云", "多云", "雾", "小毛毛雨", "毛毛雨", "大毛毛雨",
             "小冻雨", "大冻雨", "小雨", "中雨", "大雨", "小雪", "中雪", "大雪", "雪粒",
@@ -138,7 +153,18 @@ enum I18n {
         tempUnitNames: ["攝氏度", "華氏度"],
         windUnitNames: ["公里/時", "英里/時", "米/秒"],
         severityNames: ["普通預警", "嚴重預警", "緊急預警"],
-        aqiLevels: ["優", "良", "中等", "較差", "很差", "極差"],
+        aqiLevels: ["極佳", "優良", "勉強及格", "輕度污染", "嚴重污染", "小心中毒", "要命了"],
+        aqiAdvices: [
+            "快出去！嘻嘻吸天然氧吧！", "多出去走走，擁抱大自然。", "上班去吧，問題不大。",
+            "還敢不戴口罩？！多準備幾個吧。", "敢問路在何方？根本看不清！", "沒事就別出去了，嗆人！",
+            "咳咳，還敢出去？不要命了？！"
+        ],
+        uvIndex: "紫外線強度",
+        uvLevels: ["極佳", "勉強", "暴曬", "曬暈了", "要命了"],
+        uvAdvices: [
+            "還等什麼！來一場說走就走的遊玩！", "做好防曬，快抹防曬乳，穿防曬衣。", "加強防曬，多喝水，少運動。",
+            "沒啥事別出去浪，小心中暑！", "快躲起來，一定要好好活著！"
+        ],
         weatherDescs: [
             "晴", "大部晴朗", "局部多雲", "多雲", "霧", "小毛毛雨", "毛毛雨", "大毛毛雨",
             "小凍雨", "大凍雨", "小雨", "中雨", "大雨", "小雪", "中雪", "大雪", "雪粒",
@@ -172,7 +198,18 @@ enum I18n {
         tempUnitNames: ["Celsius", "Fahrenheit"],
         windUnitNames: ["km/h", "mph", "m/s"],
         severityNames: ["Warning", "Severe", "Extreme"],
-        aqiLevels: ["Good", "Fair", "Moderate", "Poor", "Very Poor", "Hazardous"],
+        aqiLevels: ["Excellent", "Good", "Barely OK", "Mild Pollution", "Heavy Pollution", "Toxic Alert", "Deadly"],
+        aqiAdvices: [
+            "Get outside now — free natural oxygen bar!", "Take a walk and hug Mother Nature.", "Off to work you go, no big deal.",
+            "Still no mask?! Better stock up.", "Where's the road? Can't see a thing!", "Just stay in — it's choking out there!",
+            "Cough cough... going out? Seriously?!"
+        ],
+        uvIndex: "UV Index",
+        uvLevels: ["Excellent", "Barely OK", "Scorching", "Dizzying", "Deadly"],
+        uvAdvices: [
+            "What are you waiting for? Go have fun!", "Sunscreen on, sun-proof clothes ready.", "More sunscreen, more water, less exercise.",
+            "Don't wander out — heatstroke alert!", "Hide now. Stay alive, please!"
+        ],
         weatherDescs: [
             "Clear", "Mainly clear", "Partly cloudy", "Overcast", "Fog", "Light drizzle", "Drizzle", "Dense drizzle",
             "Light freezing rain", "Freezing rain", "Light rain", "Rain", "Heavy rain", "Light snow", "Snow", "Heavy snow", "Snow grains",
@@ -207,7 +244,18 @@ enum I18n {
         tempUnitNames: ["摂氏", "華氏"],
         windUnitNames: ["km/h", "mph", "m/s"],
         severityNames: ["注意報", "警報", "特別警報"],
-        aqiLevels: ["良い", "まずまず", "普通", "悪い", "非常に悪い", "危険"],
+        aqiLevels: ["極上", "良好", "ぎりぎり合格", "軽度汚染", "重度汚染", "中毒注意", "命の危険"],
+        aqiAdvices: [
+            "今すぐ外へ！天然の酸素バーだよ！", "外に出て大自然を満喫しよう。", "仕事に行こう、問題なし。",
+            "まだマスクなし？！多めに用意して。", "道はどこ？何も見えない！", "用がなければ外出しないで、むせるよ！",
+            "ゴホゴホ…まだ出かける気？！"
+        ],
+        uvIndex: "紫外線指数",
+        uvLevels: ["極上", "ぎりぎり", "炎天下", "クラクラ", "命の危険"],
+        uvAdvices: [
+            "何を待ってるの？思い立ったら即お出かけ！", "日焼け止めを塗って、UVカットの服を！", "日焼け対策強化、水分補給、運動控えめに。",
+            "用もないのに出歩かない、熱中症注意！", "早く隠れて、命を大事に！"
+        ],
         weatherDescs: [
             "晴れ", "おおむね晴れ", "一部曇り", "曇り", "霧", "弱い霧雨", "霧雨", "強い霧雨",
             "弱い着氷性雨", "着氷性雨", "小雨", "雨", "大雨", "小雪", "雪", "大雪", "雪あられ",
@@ -242,7 +290,18 @@ enum I18n {
         tempUnitNames: ["섭씨", "화씨"],
         windUnitNames: ["km/h", "mph", "m/s"],
         severityNames: ["주의보", "경보", "긴급 경보"],
-        aqiLevels: ["좋음", "양호", "보통", "나쁨", "매우 나쁨", "위험"],
+        aqiLevels: ["최상", "양호", "겨우 합격", "약한 오염", "심한 오염", "중독 주의", "치명적"],
+        aqiAdvices: [
+            "얼른 나가요! 천연 산소 카페예요!", "산책하며 자연을 만끽하세요.", "출근하세요, 별문제 없어요.",
+            "아직도 마스크 없이?! 여러 개 챙기세요.", "길이 어디죠? 하나도 안 보여요!", "일 없으면 나가지 마세요, 숨 막혀요!",
+            "콜록콜록… 아직도 나가려고요?!"
+        ],
+        uvIndex: "자외선 지수",
+        uvLevels: ["최상", "그럭저럭", "땡볕", "어질어질", "치명적"],
+        uvAdvices: [
+            "뭐하세요! 지금 바로 떠나요!", "선크림 바르고 자외선 차단 옷 입기.", "자외선 차단 강화, 물 많이, 운동 자제.",
+            "괜히 돌아다니지 마세요, 열사병 조심!", "얼른 숨으세요, 꼭 살아남아요!"
+        ],
         weatherDescs: [
             "맑음", "대체로 맑음", "구름 조금", "흐림", "안개", "약한 이슬비", "이슬비", "강한 이슬비",
             "약한 어는 비", "어는 비", "약한 비", "비", "폭우", "약한 눈", "눈", "폭설", "싸락눈",
@@ -277,7 +336,18 @@ enum I18n {
         tempUnitNames: ["Цельсий", "Фаренгейт"],
         windUnitNames: ["км/ч", "миль/ч", "м/с"],
         severityNames: ["Предупреждение", "Серьёзное", "Экстренное"],
-        aqiLevels: ["Хорошо", "Приемлемо", "Умеренно", "Плохо", "Очень плохо", "Опасно"],
+        aqiLevels: ["Отлично", "Хорошо", "Едва сносно", "Лёгкое загрязнение", "Сильное загрязнение", "Риск отравления", "Смертельно"],
+        aqiAdvices: [
+            "Скорее на улицу — природный кислородный бар!", "Гуляйте больше, обнимите природу.", "Идите на работу, ничего страшного.",
+            "Всё ещё без маски?! Запаситесь.", "Где дорога? Ничего не видно!", "Без нужды не выходите — душно!",
+            "Кхе-кхе… всё ещё хотите выйти?!"
+        ],
+        uvIndex: "УФ-индекс",
+        uvLevels: ["Отлично", "Терпимо", "Пекло", "Голова кружится", "Смертельно"],
+        uvAdvices: [
+            "Чего ждёте? Пора гулять!", "Крем от солнца и закрытая одежда!", "Больше защиты и воды, меньше нагрузок.",
+            "Не гуляйте зря — риск теплового удара!", "Прячьтесь скорее, берегите себя!"
+        ],
         weatherDescs: [
             "Ясно", "Преимущественно ясно", "Переменная облачность", "Пасмурно", "Туман", "Слабая морось", "Морось", "Сильная морось",
             "Слабый ледяной дождь", "Ледяной дождь", "Небольшой дождь", "Дождь", "Ливень", "Небольшой снег", "Снег", "Сильный снег", "Снежная крупа",

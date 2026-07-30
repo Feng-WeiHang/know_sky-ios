@@ -28,7 +28,7 @@ enum WeatherAPI {
 
     static func getForecast(
         latitude: Double, longitude: Double,
-        hourly: String = "temperature_2m,precipitation,weather_code,wind_speed_10m,visibility",
+        hourly: String = "temperature_2m,precipitation,weather_code,wind_speed_10m,visibility,cape,freezing_level_height",
         models: String? = nil  // 指定数值模型（如 cma_grapes_global = 中国气象局 GRAPES），nil 时用默认最优模型
     ) async throws -> WeatherResponse {
         var query: [String: String] = [
@@ -51,7 +51,7 @@ enum WeatherAPI {
         let url = makeURL(base: "https://air-quality-api.open-meteo.com/", path: "v1/air-quality", query: [
             "latitude": String(latitude),
             "longitude": String(longitude),
-            "current": "european_aqi,pm10,pm2_5"
+            "current": "us_aqi,pm10,pm2_5,uv_index"
         ])
         return try await fetch(AirQualityResponse.self, url: url)
     }

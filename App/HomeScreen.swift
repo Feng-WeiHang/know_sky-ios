@@ -103,6 +103,10 @@ struct HomeScreen: View {
                         )
                         .padding(.horizontal, 16)
 
+                        // 紫外线强度指示条（位于空气质量上方）
+                        UvBarView(airQuality: viewModel.selectedWeather?.airQuality, strings: strings)
+                            .padding(.horizontal, 16)
+
                         // AQI 指示条
                         AqiBarView(airQuality: viewModel.selectedWeather?.airQuality, strings: strings)
                             .padding(.horizontal, 16)
