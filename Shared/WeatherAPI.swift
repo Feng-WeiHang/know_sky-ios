@@ -47,12 +47,19 @@ enum WeatherAPI {
 
     // MARK: - 空气质量
 
-    static func getAirQuality(latitude: Double, longitude: Double) async throws -> AirQualityResponse {
-        let url = makeURL(base: "https://air-quality-api.open-meteo.com/", path: "v1/air-quality", query: [
+    static func getAirQuality(
+        latitude: Double, longitude: Double,
+        hourly: String? = nil  // 逐小时字段（如 us_aqi,uv_index），仅预警链路需要
+    ) async throws -> AirQualityResponse {
+        var query: [String: String] = [
             "latitude": String(latitude),
             "longitude": String(longitude),
-            "current": "us_aqi,pm10,pm2_5,uv_index"
-        ])
+            "current": "us_aqi,pm10,pm2_5,uv_index",
+            // timezone=auto 保证小时时间戳为当地时间（与 forecast 接口对齐）
+            "timezone": "auto"
+        ]
+        if let hourly { query["hourly"] = hourly }
+        let url = makeURL(base: "https://air-quality-api.open-meteo.com/", path: "v1/air-quality", query: query)
         return try await fetch(AirQualityResponse.self, url: url)
     }
 

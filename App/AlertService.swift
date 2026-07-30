@@ -36,7 +36,14 @@ final class AlertService {
                 ).hourly
             }
 
-            let alerts = analyzeHourlyData(city: city, hourly: hourly, cmaHourly: cmaHourly, settings: settings)
+            var alerts = analyzeHourlyData(city: city, hourly: hourly, cmaHourly: cmaHourly, settings: settings)
+
+            // 逐小时空气质量/紫外线预警（数据获取失败静默，不阻断天气类预警）
+            let airHourly = try? await WeatherAPI.getAirQuality(
+                latitude: city.latitude, longitude: city.longitude,
+                hourly: "us_aqi,uv_index"
+            ).hourly
+            alerts += analyzeAirHourlyData(city: city, airHourly: airHourly ?? nil, settings: settings)
 
             for alert in alerts {
                 // 去重：同一城市同一类型 2 小时内不重复推送
@@ -91,6 +98,80 @@ final class AlertService {
         // 每种类型只保留最早的一个
         var seen = Set<AlertType>()
         return alerts.filter { seen.insert($0.alertType).inserted }
+    }
+
+    // MARK: - 逐小时空气质量/紫外线分析（阈值与 Android 完全一致）
+
+    func analyzeAirHourlyData(city: CityInfo, airHourly: AirQualityHourly?, settings: AppSettings) -> [WeatherAlert] {
+        guard let airHourly else { return [] }
+        var alerts: [WeatherAlert] = []
+        let minSeverity = settings.alertMinSeverity
+        let strings = I18n.of(settings.language)
+        let now = Date()
+
+        // 找到当前小时对应的索引
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        var startIndex = -1
+        for (i, t) in airHourly.time.enumerated() {
+            if let time = fmt.date(from: t), time >= now { startIndex = i; break }
+        }
+        guard startIndex >= 0 else { return [] }
+
+        // 检查未来 6 小时
+        let endIndex = min(startIndex + 6, airHourly.time.count - 1)
+
+        for i in startIndex...endIndex {
+            let hoursAhead = i - startIndex + 1
+            let timeStr = FormatUtils.formatIsoTime(airHourly.time[i])
+
+            // 1. 空气质量指数（>120 普通 / >160 严重 / >210 紧急）
+            if let v = airHourly.aqi?.indices.contains(i) == true ? airHourly.aqi![i] : nil,
+               let a = checkAqi(city, Int(v), hoursAhead, timeStr, minSeverity, strings) { alerts.append(a) }
+
+            // 2. 紫外线指数（3-4 普通 / 5-6 严重 / >6 紧急）
+            if let v = airHourly.uvIndex?.indices.contains(i) == true ? airHourly.uvIndex![i] : nil,
+               let a = checkUv(city, Int(v.rounded()), hoursAhead, timeStr, minSeverity, strings) { alerts.append(a) }
+        }
+
+        // 每种类型只保留最早的一个
+        var seen = Set<AlertType>()
+        return alerts.filter { seen.insert($0.alertType).inserted }
+    }
+
+    private func checkAqi(_ city: CityInfo, _ aqi: Int, _ hoursAhead: Int, _ timeStr: String, _ minSeverity: AlertSeverity, _ strings: Strings) -> WeatherAlert? {
+        let severity: AlertSeverity
+        if aqi > AlertThresholds.aqiExtreme { severity = .extreme }
+        else if aqi > AlertThresholds.aqiSevere { severity = .severe }
+        else if aqi > AlertThresholds.aqiWarning { severity = .warning }
+        else { return nil }
+        guard severity.priority >= minSeverity.priority else { return nil }
+
+        let level = AqiLevel.from(aqi: aqi)
+        let levelName = strings.aqiLevels.indices.contains(level.rawValue) ? strings.aqiLevels[level.rawValue] : ""
+        return WeatherAlert(
+            cityId: city.id, cityName: city.name, alertType: .airPollution, severity: severity,
+            message: "预计\(hoursAhead)小时后空气质量指数升至 \(aqi)（\(levelName)），请减少外出并佩戴口罩",
+            detail: "AQI：\(aqi)（\(levelName)）", detectedAt: Date(), expectedTime: timeStr
+        )
+    }
+
+    private func checkUv(_ city: CityInfo, _ uvi: Int, _ hoursAhead: Int, _ timeStr: String, _ minSeverity: AlertSeverity, _ strings: Strings) -> WeatherAlert? {
+        let severity: AlertSeverity
+        if uvi >= AlertThresholds.uviExtreme { severity = .extreme }
+        else if uvi >= AlertThresholds.uviSevere { severity = .severe }
+        else if uvi >= AlertThresholds.uviWarning { severity = .warning }
+        else { return nil }
+        guard severity.priority >= minSeverity.priority else { return nil }
+
+        let level = UvLevel.from(uvi: uvi)
+        let levelName = strings.uvLevels.indices.contains(level.rawValue) ? strings.uvLevels[level.rawValue] : ""
+        return WeatherAlert(
+            cityId: city.id, cityName: city.name, alertType: .highUv, severity: severity,
+            message: "预计\(hoursAhead)小时后紫外线指数达 \(uvi)（\(levelName)），外出请做好防晒",
+            detail: "UVI：\(uvi)（\(levelName)）", detectedAt: Date(), expectedTime: timeStr
+        )
     }
 
     private func checkWind(_ city: CityInfo, _ windSpeed: Double, _ hoursAhead: Int, _ timeStr: String, _ minSeverity: AlertSeverity) -> WeatherAlert? {

@@ -116,6 +116,12 @@ struct WeatherWidgetView: View {
                     .fontWeight(.medium)
                     .foregroundStyle(Color.aqiColor(AqiLevel.from(aqi: aqi)))
             }
+            if let uvi = entry.weather?.airQuality?.uvIndex.map({ Int($0.rounded()) }) {
+                Text("UVI \(uvi)")
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .foregroundStyle(Color.uvColor(UvLevel.from(uvi: uvi)))
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -128,6 +134,7 @@ struct WeatherWidgetView: View {
         let language = settings.language
         let tempUnit = settings.temperatureUnit
         let aqi = entry.weather?.airQuality?.aqi.map { Int($0) }
+        let uvi = entry.weather?.airQuality?.uvIndex.map { Int($0.rounded()) }
         let daily = entry.weather?.daily
 
         return VStack(alignment: .leading, spacing: 7) {
@@ -155,7 +162,7 @@ struct WeatherWidgetView: View {
 
             Rectangle().fill(style.divider).frame(height: 0.6)
 
-            // 详细气象数据网格：体感/风/湿度/能见度 + 气压/露点/空气质量/今日高低温
+            // 详细气象数据网格：体感/风/湿度/能见度 + 气压/紫外线/空气质量/今日高低温
             let columns = Array(repeating: GridItem(.flexible(), alignment: .leading), count: 4)
             LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
                 gridCell(strings.feelsLike, FormatUtils.formatTemp(current.apparentTemperature, tempUnit), style)
@@ -166,8 +173,8 @@ struct WeatherWidgetView: View {
                          current.visibility.map { String(format: "%.1f km", $0 / 1000) } ?? "--", style)
                 gridCell(strings.pressure,
                          current.pressure.map { String(format: "%.0f hPa", $0) } ?? "--", style)
-                gridCell(strings.dewPoint,
-                         current.dewPoint.map { FormatUtils.formatTemp($0, tempUnit) } ?? "--", style)
+                gridCell(strings.uvIndex,
+                         uvi.map { "\($0) \(strings.uvLevels[UvLevel.from(uvi: $0).rawValue])" } ?? "--", style)
                 gridCell(strings.airQuality,
                          aqi.map { "\($0) \(strings.aqiLevels[AqiLevel.from(aqi: $0).rawValue])" } ?? "--", style)
                 gridCell(strings.today, todayHiLo(daily, tempUnit), style)

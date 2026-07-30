@@ -94,6 +94,7 @@ enum AlertSeverity: String, Codable, CaseIterable, Identifiable {
 enum AlertType: String, Codable {
     case strongWind, storm, heavyRain, heavySnow, sandstorm, fog
     case thunderstorm, hail, freezingRain, blizzard, extremeHeat, extremeCold
+    case airPollution, highUv
 }
 
 /// 用户设置（默认值与 Android 版一致）
@@ -279,6 +280,20 @@ struct AirQualityResponse: Codable {
     let latitude: Double
     let longitude: Double
     let current: AirQualityCurrent?
+    var hourly: AirQualityHourly? = nil
+}
+
+/// 逐小时空气质量/紫外线数据（用于 AQI/UVI 预警分析）
+struct AirQualityHourly: Codable {
+    let time: [String]
+    var aqi: [Double?]? = nil
+    var uvIndex: [Double?]? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case time
+        case aqi = "us_aqi"
+        case uvIndex = "uv_index"
+    }
 }
 
 struct AirQualityCurrent: Codable {
@@ -404,6 +419,16 @@ enum AlertThresholds {
     // 能见度阈值 (m)
     static let visibilitySevere = 1000.0
     static let visibilityWarning = 500.0
+
+    // 空气质量指数阈值（us_aqi，超过即触发对应级别）：>120 普通 / >160 严重 / >210 紧急
+    static let aqiWarning = 120
+    static let aqiSevere = 160
+    static let aqiExtreme = 210
+
+    // 紫外线指数阈值（UVI）：3-4 普通 / 5-6 严重 / >6 紧急
+    static let uviWarning = 3
+    static let uviSevere = 5
+    static let uviExtreme = 7
 
     // 极端天气 WMO 代码（语义修正版，参照 WMO 4677 标准，与 Android 一致）
     static let severeWeatherCodes: Set<Int> = [56, 57, 65, 66, 67, 71, 73, 75, 77, 82, 85, 86, 95, 96, 99]
