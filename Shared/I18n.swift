@@ -69,6 +69,16 @@ struct Strings {
     let weatherWidgetOpacity: String
     let widgetThemeColor: String
     let dewPoint: String
+    let sunrise: String
+    let sunset: String
+    // 预报详情八项标签（日出/日落复用上方字段）
+    let tempMaxLabel: String
+    let tempMinLabel: String
+    let feelsMaxLabel: String
+    let feelsMinLabel: String
+    let precipSumLabel: String
+    let precipProbLabel: String
+    let hourly24Title: String        // 24 小时预报卡标题
     let widgetThemeNames: [String]   // 动态/浅白/深空/蓝/绿/紫
     // 枚举翻译表
     let themeModes: [String]         // 浅色/深色/跟随系统
@@ -108,6 +118,11 @@ enum I18n {
         widgetLoading: "加载中...", widgetUpdatePrefix: "更新", widgetFetchFailed: "天气数据获取失败",
         settingsWidgets: "组件", clockWidgetOpacity: "时钟组件底板透明度", weatherWidgetOpacity: "气象组件底板透明度",
         widgetThemeColor: "组件主题颜色", dewPoint: "露点",
+        sunrise: "日出", sunset: "日落",
+        tempMaxLabel: "最高温度", tempMinLabel: "最低温度",
+        feelsMaxLabel: "体感最高", feelsMinLabel: "体感最低",
+        precipSumLabel: "降水量", precipProbLabel: "降水概率",
+        hourly24Title: "24小时预报",
         widgetThemeNames: ["动态", "浅白", "深空", "晴空蓝", "青碧绿", "暮霭紫"],
         themeModes: ["浅色", "深色", "跟随系统"],
         tempUnitNames: ["摄氏度", "华氏度"],
@@ -155,6 +170,11 @@ enum I18n {
         widgetLoading: "載入中...", widgetUpdatePrefix: "更新", widgetFetchFailed: "天氣資料取得失敗",
         settingsWidgets: "小工具", clockWidgetOpacity: "時鐘小工具底板透明度", weatherWidgetOpacity: "氣象小工具底板透明度",
         widgetThemeColor: "小工具主題顏色", dewPoint: "露點",
+        sunrise: "日出", sunset: "日落",
+        tempMaxLabel: "最高溫度", tempMinLabel: "最低溫度",
+        feelsMaxLabel: "體感最高", feelsMinLabel: "體感最低",
+        precipSumLabel: "降水量", precipProbLabel: "降水機率",
+        hourly24Title: "24小時預報",
         widgetThemeNames: ["動態", "淺白", "深空", "晴空藍", "青碧綠", "暮靄紫"],
         themeModes: ["淺色", "深色", "跟隨系統"],
         tempUnitNames: ["攝氏度", "華氏度"],
@@ -202,6 +222,11 @@ enum I18n {
         widgetLoading: "Loading...", widgetUpdatePrefix: "Upd", widgetFetchFailed: "Weather fetch failed",
         settingsWidgets: "Widgets", clockWidgetOpacity: "Clock Widget Opacity", weatherWidgetOpacity: "Weather Widget Opacity",
         widgetThemeColor: "Widget Theme Color", dewPoint: "Dew point",
+        sunrise: "Sunrise", sunset: "Sunset",
+        tempMaxLabel: "High", tempMinLabel: "Low",
+        feelsMaxLabel: "Feels high", feelsMinLabel: "Feels low",
+        precipSumLabel: "Precip.", precipProbLabel: "Precip. chance",
+        hourly24Title: "24-Hour Forecast",
         widgetThemeNames: ["Dynamic", "Light", "Dark", "Blue", "Green", "Purple"],
         themeModes: ["Light", "Dark", "System"],
         tempUnitNames: ["Celsius", "Fahrenheit"],
@@ -250,6 +275,11 @@ enum I18n {
         widgetLoading: "読み込み中...", widgetUpdatePrefix: "更新", widgetFetchFailed: "天気データの取得に失敗",
         settingsWidgets: "ウィジェット", clockWidgetOpacity: "時計ウィジェットの不透明度", weatherWidgetOpacity: "天気ウィジェットの不透明度",
         widgetThemeColor: "ウィジェットのテーマカラー", dewPoint: "露点",
+        sunrise: "日の出", sunset: "日の入り",
+        tempMaxLabel: "最高気温", tempMinLabel: "最低気温",
+        feelsMaxLabel: "体感最高", feelsMinLabel: "体感最低",
+        precipSumLabel: "降水量", precipProbLabel: "降水確率",
+        hourly24Title: "24時間予報",
         widgetThemeNames: ["ダイナミック", "ライト", "ダーク", "ブルー", "グリーン", "パープル"],
         themeModes: ["ライト", "ダーク", "システムに従う"],
         tempUnitNames: ["摂氏", "華氏"],
@@ -299,6 +329,11 @@ enum I18n {
         widgetLoading: "로딩 중...", widgetUpdatePrefix: "업데이트", widgetFetchFailed: "날씨 데이터 가져오기 실패",
         settingsWidgets: "위젯", clockWidgetOpacity: "시계 위젯 배경 불투명도", weatherWidgetOpacity: "날씨 위젯 배경 불투명도",
         widgetThemeColor: "위젯 테마 색상", dewPoint: "이슬점",
+        sunrise: "일출", sunset: "일몰",
+        tempMaxLabel: "최고 기온", tempMinLabel: "최저 기온",
+        feelsMaxLabel: "체감 최고", feelsMinLabel: "체감 최저",
+        precipSumLabel: "강수량", precipProbLabel: "강수 확률",
+        hourly24Title: "24시간 예보",
         widgetThemeNames: ["동적", "라이트", "다크", "블루", "그린", "퍼플"],
         themeModes: ["라이트", "다크", "시스템 따름"],
         tempUnitNames: ["섭씨", "화씨"],
@@ -348,6 +383,11 @@ enum I18n {
         widgetLoading: "Загрузка...", widgetUpdatePrefix: "Обн", widgetFetchFailed: "Ошибка получения погоды",
         settingsWidgets: "Виджеты", clockWidgetOpacity: "Непрозрачность фона часов", weatherWidgetOpacity: "Непрозрачность фона погоды",
         widgetThemeColor: "Цвет темы виджетов", dewPoint: "Точка росы",
+        sunrise: "Восход", sunset: "Закат",
+        tempMaxLabel: "Макс.", tempMinLabel: "Мин.",
+        feelsMaxLabel: "Ощущ. макс.", feelsMinLabel: "Ощущ. мин.",
+        precipSumLabel: "Осадки", precipProbLabel: "Вероятн. осадков",
+        hourly24Title: "Прогноз на 24 часа",
         widgetThemeNames: ["Динамич.", "Светлая", "Тёмная", "Синяя", "Зелёная", "Фиолет."],
         themeModes: ["Светлая", "Тёмная", "Как в системе"],
         tempUnitNames: ["Цельсий", "Фаренгейт"],

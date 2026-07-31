@@ -29,6 +29,8 @@ enum WeatherAPI {
     static func getForecast(
         latitude: Double, longitude: Double,
         hourly: String = "temperature_2m,precipitation,weather_code,wind_speed_10m,visibility,cape,freezing_level_height",
+        // 逐日字段：体感高低温与日出日落供预报详情展示；指定 models 时应传最小集合（模型不一定支持全部变量）
+        daily: String = "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,apparent_temperature_max,apparent_temperature_min,sunrise,sunset",
         models: String? = nil  // 指定数值模型（如 cma_grapes_global = 中国气象局 GRAPES），nil 时用默认最优模型
     ) async throws -> WeatherResponse {
         var query: [String: String] = [
@@ -36,7 +38,7 @@ enum WeatherAPI {
             "longitude": String(longitude),
             "current": "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,visibility,dew_point_2m",
             "hourly": hourly,
-            "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max",
+            "daily": daily,
             "timezone": "auto",
             "forecast_days": "6"
         ]

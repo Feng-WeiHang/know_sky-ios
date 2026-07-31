@@ -32,6 +32,8 @@ final class AlertService {
                 cmaHourly = try? await WeatherAPI.getForecast(
                     latitude: city.latitude, longitude: city.longitude,
                     hourly: "weather_code,temperature_2m",
+                    // CMA 模型不支持全部逐日变量，这里只取天气码，避免请求被服务端拒绝
+                    daily: "weather_code",
                     models: "cma_grapes_global"
                 ).hourly
             }

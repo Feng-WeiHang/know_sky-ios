@@ -10,6 +10,12 @@ enum FormatUtils {
         "\(Int(unit.convert(celsius).rounded()))\(unit.symbol)"
     }
 
+    /// 格式化温度（缺数据时给占位符，用于露点/体感高低温等可空字段）
+    static func formatTempOrDash(_ celsius: Double?, _ unit: TemperatureUnit) -> String {
+        guard let c = celsius else { return "--" }
+        return formatTemp(c, unit)
+    }
+
     /// 温度数值（不带单位符号，用于 "28°" 风格）
     static func tempValue(_ celsius: Double, _ unit: TemperatureUnit) -> String {
         "\(Int(unit.convert(celsius).rounded()))°"
@@ -41,6 +47,12 @@ enum FormatUtils {
     /// ISO 时间 -> HH:mm（"2024-01-15T14:00" -> "14:00"）
     static func formatIsoTime(_ isoTime: String) -> String {
         isoTime.contains("T") ? String(isoTime.split(separator: "T").last!.prefix(5)) : isoTime
+    }
+
+    /// ISO 时间 -> HH:mm（缺数据时给占位符，用于日出日落）
+    static func formatIsoTimeOrDash(_ isoTime: String?) -> String {
+        guard let t = isoTime, !t.isEmpty else { return "--" }
+        return formatIsoTime(t)
     }
 
     /// 解析 yyyy-MM-dd
@@ -182,6 +194,16 @@ extension Color {
 
     /// 紫外线等级颜色
     static func uvColor(_ level: UvLevel) -> Color { Color(hex: level.colorHex) }
+
+    /// AQI 描述文字颜色：浅色底用加深版（深绿/深橙/深红/深紫），深色底保留原亮色
+    static func aqiTextColor(_ level: AqiLevel, _ scheme: ColorScheme) -> Color {
+        Color(hex: scheme == .dark ? level.colorHex : level.deepColorHex)
+    }
+
+    /// 紫外线描述文字颜色（与 aqiTextColor 策略一致）
+    static func uvTextColor(_ level: UvLevel, _ scheme: ColorScheme) -> Color {
+        Color(hex: scheme == .dark ? level.colorHex : level.deepColorHex)
+    }
 
     /// 预警等级颜色
     static func severityColor(_ s: AlertSeverity) -> Color { Color(hex: s.colorHex) }

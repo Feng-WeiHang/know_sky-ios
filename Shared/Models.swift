@@ -273,6 +273,11 @@ struct DailyWeather: Codable {
     let temperatureMin: [Double]
     let precipitationSum: [Double]?
     let precipitationProbabilityMax: [Int]?
+    var apparentTemperatureMax: [Double]? = nil
+    var apparentTemperatureMin: [Double]? = nil
+    // ISO 本地时间串，形如 2026-07-24T05:12
+    var sunrise: [String]? = nil
+    var sunset: [String]? = nil
 
     enum CodingKeys: String, CodingKey {
         case time
@@ -281,6 +286,10 @@ struct DailyWeather: Codable {
         case temperatureMin = "temperature_2m_min"
         case precipitationSum = "precipitation_sum"
         case precipitationProbabilityMax = "precipitation_probability_max"
+        case apparentTemperatureMax = "apparent_temperature_max"
+        case apparentTemperatureMin = "apparent_temperature_min"
+        case sunrise
+        case sunset
     }
 }
 
@@ -292,7 +301,19 @@ struct DayForecast: Identifiable {
     let tempMin: Double
     let precipitationSum: Double
     let precipitationProbability: Int
+    var apparentTempMax: Double? = nil
+    var apparentTempMin: Double? = nil
+    var sunrise: String? = nil
+    var sunset: String? = nil
     var id: String { date }
+}
+
+/// UI 层使用的逐小时预报数据（24 小时预报卡）
+struct HourForecast: Identifiable {
+    let time: String
+    let weatherCode: Int
+    let temperature: Double
+    var id: String { time }
 }
 
 // MARK: - 空气质量
@@ -349,6 +370,19 @@ enum AqiLevel: Int, CaseIterable {
         }
     }
 
+    /// 同色系加深版（深绿/深橙/深红/深紫），专用于浅色底上的描述文字
+    var deepColorHex: UInt32 {
+        switch self {
+        case .excellent: return 0xFF1B5E20
+        case .good: return 0xFF33691E
+        case .passable: return 0xFF8A6100
+        case .mild: return 0xFFBF5B00
+        case .severe: return 0xFFB71C1C
+        case .toxic: return 0xFF6A1B9A
+        case .deadly: return 0xFF4A148C
+        }
+    }
+
     static func from(aqi: Int) -> AqiLevel {
         switch aqi {
         case 0...30: return .excellent
@@ -373,6 +407,17 @@ enum UvLevel: Int, CaseIterable {
         case .scorching: return 0xFFFF9800
         case .dizzy: return 0xFFF44336
         case .deadly: return 0xFF9C27B0
+        }
+    }
+
+    /// 同色系加深版，与 AqiLevel.deepColorHex 用途一致
+    var deepColorHex: UInt32 {
+        switch self {
+        case .excellent: return 0xFF1B5E20
+        case .passable: return 0xFF8A6100
+        case .scorching: return 0xFFBF5B00
+        case .dizzy: return 0xFFB71C1C
+        case .deadly: return 0xFF4A148C
         }
     }
 
@@ -406,9 +451,39 @@ struct CityWeatherData: Codable {
                 tempMax: d.temperatureMax[i],
                 tempMin: d.temperatureMin[i],
                 precipitationSum: (d.precipitationSum?.indices.contains(i) == true) ? d.precipitationSum![i] : 0.0,
-                precipitationProbability: (d.precipitationProbabilityMax?.indices.contains(i) == true) ? d.precipitationProbabilityMax![i] : 0
+                precipitationProbability: (d.precipitationProbabilityMax?.indices.contains(i) == true) ? d.precipitationProbabilityMax![i] : 0,
+                apparentTempMax: (d.apparentTemperatureMax?.indices.contains(i) == true) ? d.apparentTemperatureMax![i] : nil,
+                apparentTempMin: (d.apparentTemperatureMin?.indices.contains(i) == true) ? d.apparentTemperatureMin![i] : nil,
+                sunrise: (d.sunrise?.indices.contains(i) == true) ? d.sunrise![i] : nil,
+                sunset: (d.sunset?.indices.contains(i) == true) ? d.sunset![i] : nil
             )
         }
+    }
+
+    /// 今日日落时刻（ISO 本地时间串），主天气卡展示用
+    var todaySunset: String? { daily?.sunset?.first }
+
+    /// 自「当前整点」起的未来 24 小时逐时预报。
+    /// 时间锚点优先取接口返回的 current.time —— 它与 hourly 同处城市所在时区，
+    /// 直接用设备本地时间比较会在跨时区城市上错位
+    var hourForecasts: [HourForecast] {
+        guard let h = hourly, let codes = h.weatherCode, let temps = h.temperature else { return [] }
+        // 精确到小时的前缀（yyyy-MM-ddTHH），ISO 串可直接按字典序比较
+        let anchor = String((current?.time ?? Self.localHourPrefix()).prefix(13))
+        let start = h.time.firstIndex(where: { String($0.prefix(13)) >= anchor }) ?? 0
+        let end = min(start + 24, h.time.count)
+        guard start < end else { return [] }
+        return (start..<end).compactMap { i in
+            guard codes.indices.contains(i), temps.indices.contains(i) else { return nil }
+            return HourForecast(time: h.time[i], weatherCode: codes[i], temperature: temps[i])
+        }
+    }
+
+    private static func localHourPrefix() -> String {
+        let fmt = DateFormatter()
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.dateFormat = "yyyy-MM-dd'T'HH"
+        return fmt.string(from: Date())
     }
 }
 

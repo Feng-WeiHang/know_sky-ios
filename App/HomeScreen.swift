@@ -99,7 +99,8 @@ struct HomeScreen: View {
                             tempUnit: viewModel.settings.temperatureUnit,
                             windUnit: viewModel.settings.windSpeedUnit,
                             strings: strings,
-                            language: language
+                            language: language,
+                            sunset: viewModel.selectedWeather?.todaySunset
                         )
                         .padding(.horizontal, 16)
 
@@ -110,6 +111,18 @@ struct HomeScreen: View {
                         // AQI 指示条
                         AqiBarView(airQuality: viewModel.selectedWeather?.airQuality, strings: strings)
                             .padding(.horizontal, 16)
+
+                        // 24 小时预报（横向拖拽滚动，位于 5 日预报上方）
+                        let hours = viewModel.selectedWeather?.hourForecasts ?? []
+                        if !hours.isEmpty {
+                            HourlyForecastCardView(
+                                hours: hours,
+                                tempUnit: viewModel.settings.temperatureUnit,
+                                strings: strings,
+                                language: language
+                            )
+                            .padding(.horizontal, 16)
+                        }
 
                         // 5日预报
                         let forecasts = viewModel.selectedWeather?.dayForecasts ?? []

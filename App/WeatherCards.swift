@@ -9,6 +9,8 @@ struct WeatherCardView: View {
     let windUnit: WindSpeedUnit
     let strings: Strings
     let language: AppLanguage
+    /// 今日日落时间（ISO 本地时间串），来自 daily.sunset
+    var sunset: String? = nil
 
     var body: some View {
         Group {
@@ -63,19 +65,25 @@ struct WeatherCardView: View {
             Divider()
             Spacer().frame(height: 12)
 
-            // 详细信息网格：风力 / 湿度 / 气压 / 能见度
-            HStack {
+            // 详细信息网格（2 行 3 列，各列等宽对齐）
+            HStack(spacing: 0) {
                 DetailItemView(icon: "wind", label: strings.wind,
                                value: "\(I18n.windLabel(current.windDirection, language)) \(FormatUtils.formatWindSpeed(current.windSpeed, windUnit))")
-                Spacer()
                 DetailItemView(icon: "drop.fill", label: strings.humidity,
                                value: FormatUtils.formatHumidity(current.humidity))
-                Spacer()
                 DetailItemView(icon: "gauge.with.dots.needle.bottom.50percent", label: strings.pressure,
                                value: FormatUtils.formatPressure(current.pressure))
-                Spacer()
+            }
+
+            Spacer().frame(height: 12)
+
+            HStack(spacing: 0) {
                 DetailItemView(icon: "eye.fill", label: strings.visibility,
                                value: FormatUtils.formatVisibility(current.visibility))
+                DetailItemView(icon: "humidity.fill", label: strings.dewPoint,
+                               value: FormatUtils.formatTempOrDash(current.dewPoint, tempUnit))
+                DetailItemView(icon: "sunset.fill", label: strings.sunset,
+                               value: FormatUtils.formatIsoTimeOrDash(sunset))
             }
         }
         .padding(20)
@@ -100,7 +108,10 @@ private struct DetailItemView: View {
             Text(value)
                 .font(.caption)
                 .fontWeight(.medium)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -110,11 +121,15 @@ struct AqiBarView: View {
     let airQuality: AirQualityCurrent?
     let strings: Strings
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         if let aqiValue = airQuality?.aqi {
             let aqi = Int(aqiValue)
             let level = AqiLevel.from(aqi: aqi)
             let aqiColor = Color.aqiColor(level)
+            // 浅色底上文字改用同色系加深版，渐变条与背景仍用原亮色
+            let textColor = Color.aqiTextColor(level, colorScheme)
 
             VStack(spacing: 12) {
                 HStack {
@@ -125,11 +140,11 @@ struct AqiBarView: View {
                     Text("AQI \(aqi)")
                         .font(.subheadline)
                         .fontWeight(.bold)
-                        .foregroundStyle(aqiColor)
+                        .foregroundStyle(textColor)
                     Text(strings.aqiLevels.indices.contains(level.rawValue) ? strings.aqiLevels[level.rawValue] : "")
                         .font(.caption)
                         .fontWeight(.medium)
-                        .foregroundStyle(aqiColor)
+                        .foregroundStyle(textColor)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
                         .background(aqiColor.opacity(0.15), in: Capsule())
@@ -139,7 +154,7 @@ struct AqiBarView: View {
                 if strings.aqiAdvices.indices.contains(level.rawValue) {
                     Text(strings.aqiAdvices[level.rawValue])
                         .font(.caption)
-                        .foregroundStyle(aqiColor)
+                        .foregroundStyle(textColor)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
@@ -176,11 +191,15 @@ struct UvBarView: View {
     let airQuality: AirQualityCurrent?
     let strings: Strings
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         if let uviValue = airQuality?.uvIndex {
             let uvi = Int(uviValue.rounded())
             let level = UvLevel.from(uvi: uvi)
             let uvColor = Color.uvColor(level)
+            // 同 AQI 卡：文字用加深色，渐变条保持原亮色
+            let textColor = Color.uvTextColor(level, colorScheme)
 
             VStack(spacing: 12) {
                 HStack {
@@ -191,11 +210,11 @@ struct UvBarView: View {
                     Text("UVI \(uvi)")
                         .font(.subheadline)
                         .fontWeight(.bold)
-                        .foregroundStyle(uvColor)
+                        .foregroundStyle(textColor)
                     Text(strings.uvLevels.indices.contains(level.rawValue) ? strings.uvLevels[level.rawValue] : "")
                         .font(.caption)
                         .fontWeight(.medium)
-                        .foregroundStyle(uvColor)
+                        .foregroundStyle(textColor)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
                         .background(uvColor.opacity(0.15), in: Capsule())
@@ -205,7 +224,7 @@ struct UvBarView: View {
                 if strings.uvAdvices.indices.contains(level.rawValue) {
                     Text(strings.uvAdvices[level.rawValue])
                         .font(.caption)
-                        .foregroundStyle(uvColor)
+                        .foregroundStyle(textColor)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
@@ -290,7 +309,7 @@ struct ForecastCardView: View {
 
                 // 展开详情
                 if isExpanded {
-                    DayDetailView(day: day, tempUnit: tempUnit, language: language)
+                    DayDetailView(day: day, tempUnit: tempUnit, strings: strings, language: language)
                         .padding(.vertical, 8)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -345,10 +364,11 @@ private struct TemperatureBarView: View {
     }
 }
 
-/// 日期展开详情卡片（对应 Android DetailCard）
+/// 日期展开详情卡片（对应 Android DetailCard，2 行 4 列八项）
 private struct DayDetailView: View {
     let day: DayForecast
     let tempUnit: TemperatureUnit
+    let strings: Strings
     let language: AppLanguage
 
     var body: some View {
@@ -368,17 +388,27 @@ private struct DayDetailView: View {
                 Spacer()
             }
 
-            HStack {
-                DetailColumnView(icon: "thermometer.high", label: "最高温度",
+            // 第 1 行：最高温度 / 体感最高 / 日出 / 降水量
+            HStack(spacing: 0) {
+                DetailColumnView(icon: "thermometer.high", label: strings.tempMaxLabel,
                                  value: FormatUtils.formatTemp(day.tempMax, tempUnit))
-                Spacer()
-                DetailColumnView(icon: "thermometer.low", label: "最低温度",
-                                 value: FormatUtils.formatTemp(day.tempMin, tempUnit))
-                Spacer()
-                DetailColumnView(icon: "umbrella.fill", label: "降水量",
+                DetailColumnView(icon: "flame.fill", label: strings.feelsMaxLabel,
+                                 value: FormatUtils.formatTempOrDash(day.apparentTempMax, tempUnit))
+                DetailColumnView(icon: "sunrise.fill", label: strings.sunrise,
+                                 value: FormatUtils.formatIsoTimeOrDash(day.sunrise))
+                DetailColumnView(icon: "umbrella.fill", label: strings.precipSumLabel,
                                  value: String(format: "%.1f mm", day.precipitationSum))
-                Spacer()
-                DetailColumnView(icon: "drop.fill", label: "降水概率",
+            }
+
+            // 第 2 行：与上行同列配对（温度/体感/日出日落各自同列）
+            HStack(spacing: 0) {
+                DetailColumnView(icon: "thermometer.low", label: strings.tempMinLabel,
+                                 value: FormatUtils.formatTemp(day.tempMin, tempUnit))
+                DetailColumnView(icon: "snowflake", label: strings.feelsMinLabel,
+                                 value: FormatUtils.formatTempOrDash(day.apparentTempMin, tempUnit))
+                DetailColumnView(icon: "sunset.fill", label: strings.sunset,
+                                 value: FormatUtils.formatIsoTimeOrDash(day.sunset))
+                DetailColumnView(icon: "drop.fill", label: strings.precipProbLabel,
                                  value: "\(day.precipitationProbability)%")
             }
         }
@@ -398,13 +428,103 @@ private struct DetailColumnView: View {
             Image(systemName: icon)
                 .font(.system(size: 15))
                 .foregroundStyle(.tint)
-                .opacity(0.7)
+            // 标签与数值均用主文字色加粗，避免次级灰在浅底上发虚
             Text(label)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .fontWeight(.medium)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
             Text(value)
                 .font(.subheadline)
-                .fontWeight(.medium)
+                .fontWeight(.bold)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - 24 小时预报卡片（对应 Android HourlyForecastCard，横向拖拽滚动）
+
+struct HourlyForecastCardView: View {
+    let hours: [HourForecast]
+    let tempUnit: TemperatureUnit
+    let strings: Strings
+    let language: AppLanguage
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        if !hours.isEmpty {
+            // 极值可能出现多个，按数值相等全部标色
+            let maxTemp = hours.map(\.temperature).max() ?? 0
+            let minTemp = hours.map(\.temperature).min() ?? 0
+            let isDark = colorScheme == .dark
+            let hotColor = Color(hex: isDark ? 0xFFFF7B72 : 0xFFC62828)
+            let coldColor = Color(hex: isDark ? 0xFF7FC4FF : 0xFF1565C0)
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text(strings.hourly24Title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .padding(.horizontal, 16)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: 4) {
+                        ForEach(hours) { hour in
+                            let tempColor: Color = {
+                                if hour.temperature == maxTemp { return hotColor }
+                                if hour.temperature == minTemp { return coldColor }
+                                return .primary
+                            }()
+                            HourColumnView(
+                                time: FormatUtils.formatIsoTime(hour.time),
+                                weatherCode: hour.weatherCode,
+                                desc: I18n.weatherDesc(hour.weatherCode, language),
+                                temp: FormatUtils.formatTemp(hour.temperature, tempUnit),
+                                tempColor: tempColor
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+            }
+            .padding(.vertical, 16)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
+        }
+    }
+}
+
+/// 单小时列（时间 / 图标 / 简要说明 / 温度）
+private struct HourColumnView: View {
+    let time: String
+    let weatherCode: Int
+    let desc: String
+    let temp: String
+    let tempColor: Color
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Text(time)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Image(systemName: WeatherSymbols.symbol(for: weatherCode))
+                .symbolRenderingMode(.multicolor)
+                .font(.system(size: 22))
+            // 固定两行，保证各列高度一致
+            Text(desc)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2, reservesSpace: true)
+                .minimumScaleFactor(0.8)
+            Text(temp)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(tempColor)
+        }
+        .frame(width: 62)
     }
 }
