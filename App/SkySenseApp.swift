@@ -24,7 +24,7 @@ struct SkySenseApp: App {
                 .environmentObject(viewModel)
                 .task {
                     await requestNotificationPermission()
-                    // 定位授权：GPS 识别当前城市，AQI/UVI 预警仅针对当前城市推送
+                    // 定位授权：AQI/UVI 预警直接按 GPS 实际坐标取数，前台先定位并落盘
                     LocationService.shared.requestAuthorizationAndLocate()
                     scheduleBackgroundTasks()
                 }
@@ -33,7 +33,7 @@ struct SkySenseApp: App {
             switch phase {
             case .active:
                 Task { await viewModel.refreshIfStale() }
-                // 回到前台时刷新一次位置，保持“当前城市”判定新鲜
+                // 回到前台刷新定位（后台任务定位受限，依赖前台落盘的定位点）
                 LocationService.shared.requestAuthorizationAndLocate()
             case .background:
                 scheduleBackgroundTasks()

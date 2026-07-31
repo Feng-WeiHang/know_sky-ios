@@ -15,6 +15,7 @@ final class AppStore {
         static let settings = "settings_json"
         static let alertKeys = "recent_alert_keys"          // [key: 触发时间戳]
         static let weatherCachePrefix = "weather_cache_"    // + cityId
+        static let currentLocation = "current_location_json"
     }
 
     /// 预警去重有效期：2 小时（与 Android 一致）
@@ -109,6 +110,22 @@ final class AppStore {
         let dict = defaults.dictionary(forKey: Keys.alertKeys) as? [String: Double] ?? [:]
         return Set(dict.keys)
     }
+
+    // MARK: - GPS 当前定位点
+
+    /// 最近一次成功定位的点（含反查地名与时间戳），供后台预警读取
+    func getCurrentLocation() -> CurrentLocationPoint? {
+        guard let data = defaults.data(forKey: Keys.currentLocation) else { return nil }
+        return try? JSONDecoder().decode(CurrentLocationPoint.self, from: data)
+    }
+
+    func saveCurrentLocation(_ point: CurrentLocationPoint) {
+        if let data = try? JSONEncoder().encode(point) {
+            defaults.set(data, forKey: Keys.currentLocation)
+        }
+    }
+
+    // MARK: - 预警去重记录
 
     func addAlertKey(_ key: String) {
         var dict = defaults.dictionary(forKey: Keys.alertKeys) as? [String: Double] ?? [:]

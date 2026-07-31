@@ -20,10 +20,6 @@ final class AlertService {
         let recentKeys = store.getRecentAlertKeys()
         let language = settings.language
 
-        // GPS 定位当前城市：AQI/UVI 预警仅针对当前所在城市推送
-        // （定位不可用时回退列表首城）
-        let currentCity = LocationService.shared.resolveCurrentCity(from: cities)
-
         for city in cities {
             guard let forecast = try? await WeatherAPI.getForecast(
                 latitude: city.latitude, longitude: city.longitude,
@@ -40,26 +36,54 @@ final class AlertService {
                 ).hourly
             }
 
-            var alerts = analyzeHourlyData(city: city, hourly: hourly, cmaHourly: cmaHourly, settings: settings)
-
-            // 天气类预警覆盖所有城市；AQI/UVI 预警只检测 GPS 定位到的当前城市
-            // （数据获取失败静默，不阻断天气类预警）
-            if city.id == currentCity?.id {
-                let airHourly = try? await WeatherAPI.getAirQuality(
-                    latitude: city.latitude, longitude: city.longitude,
-                    hourly: "us_aqi,uv_index"
-                ).hourly
-                alerts += analyzeAirHourlyData(city: city, airHourly: airHourly ?? nil, settings: settings)
-            }
-
-            for alert in alerts {
-                // 去重：同一城市同一类型 2 小时内不重复推送
-                let key = "\(alert.cityId)_\(alert.alertType.rawValue)"
-                guard !recentKeys.contains(key) else { continue }
-                await sendNotification(alert, language: language)
-                store.addAlertKey(key)
-            }
+            // 天气类预警覆盖所有已添加城市
+            let alerts = analyzeHourlyData(city: city, hourly: hourly, cmaHourly: cmaHourly, settings: settings)
+            await dispatch(alerts, recentKeys: recentKeys, language: language)
         }
+
+        // AQI/UVI 预警：只按 GPS 实际定位坐标取数与判定（与已添加城市列表无关）
+        await checkCurrentLocationAirAlerts(cities: cities, settings: settings, recentKeys: recentKeys)
+    }
+
+    /// 推送并登记去重键（同一来源同一类型 2 小时内不重复推送）
+    private func dispatch(_ alerts: [WeatherAlert], recentKeys: Set<String>, language: AppLanguage) async {
+        for alert in alerts {
+            let key = "\(alert.cityId)_\(alert.alertType.rawValue)"
+            guard !recentKeys.contains(key) else { continue }
+            await sendNotification(alert, language: language)
+            store.addAlertKey(key)
+        }
+    }
+
+    /// 空气质量/紫外线预警：直接用 GPS 定位坐标向接口取数，地名由离线逆地理编码得到。
+    /// 无有效定位时：仅添加了一个城市则用该城市（用户意图明确），多城市直接跳过，避免误报到错误城市
+    private func checkCurrentLocationAirAlerts(cities: [CityInfo], settings: AppSettings, recentKeys: Set<String>) async {
+        let strings = I18n.of(settings.language)
+        let latitude: Double
+        let longitude: Double
+        let label: String
+
+        if let point = await LocationService.shared.currentPointForAlert() {
+            latitude = point.latitude
+            longitude = point.longitude
+            label = point.name.isEmpty ? strings.currentLocationFallbackName : point.name
+        } else if cities.count == 1 {
+            latitude = cities[0].latitude
+            longitude = cities[0].longitude
+            label = cities[0].name
+        } else {
+            return
+        }
+
+        guard let airHourly = try? await WeatherAPI.getAirQuality(
+            latitude: latitude, longitude: longitude, hourly: "us_aqi,uv_index"
+        ).hourly else { return }
+
+        let alerts = analyzeAirHourlyData(
+            sourceId: CurrentLocationPoint.id, sourceName: label,
+            airHourly: airHourly, settings: settings
+        )
+        await dispatch(alerts, recentKeys: recentKeys, language: settings.language)
     }
 
     // MARK: - 逐小时数据分析（阈值与 Android 完全一致）
@@ -109,7 +133,7 @@ final class AlertService {
 
     // MARK: - 逐小时空气质量/紫外线分析（阈值与 Android 完全一致）
 
-    func analyzeAirHourlyData(city: CityInfo, airHourly: AirQualityHourly?, settings: AppSettings) -> [WeatherAlert] {
+    func analyzeAirHourlyData(sourceId: String, sourceName: String, airHourly: AirQualityHourly?, settings: AppSettings) -> [WeatherAlert] {
         guard let airHourly else { return [] }
         var alerts: [WeatherAlert] = []
         let minSeverity = settings.alertMinSeverity
@@ -135,11 +159,11 @@ final class AlertService {
 
             // 1. 空气质量指数（>120 普通 / >160 严重 / >210 紧急）
             if let v = airHourly.aqi?.indices.contains(i) == true ? airHourly.aqi![i] : nil,
-               let a = checkAqi(city, Int(v), hoursAhead, timeStr, minSeverity, strings) { alerts.append(a) }
+               let a = checkAqi(sourceId, sourceName, Int(v), hoursAhead, timeStr, minSeverity, strings) { alerts.append(a) }
 
             // 2. 紫外线指数（3-4 普通 / 5-6 严重 / >6 紧急）
             if let v = airHourly.uvIndex?.indices.contains(i) == true ? airHourly.uvIndex![i] : nil,
-               let a = checkUv(city, Int(v.rounded()), hoursAhead, timeStr, minSeverity, strings) { alerts.append(a) }
+               let a = checkUv(sourceId, sourceName, Int(v.rounded()), hoursAhead, timeStr, minSeverity, strings) { alerts.append(a) }
         }
 
         // 每种类型只保留最早的一个
@@ -147,7 +171,7 @@ final class AlertService {
         return alerts.filter { seen.insert($0.alertType).inserted }
     }
 
-    private func checkAqi(_ city: CityInfo, _ aqi: Int, _ hoursAhead: Int, _ timeStr: String, _ minSeverity: AlertSeverity, _ strings: Strings) -> WeatherAlert? {
+    private func checkAqi(_ sourceId: String, _ sourceName: String, _ aqi: Int, _ hoursAhead: Int, _ timeStr: String, _ minSeverity: AlertSeverity, _ strings: Strings) -> WeatherAlert? {
         let severity: AlertSeverity
         if aqi > AlertThresholds.aqiExtreme { severity = .extreme }
         else if aqi > AlertThresholds.aqiSevere { severity = .severe }
@@ -158,13 +182,13 @@ final class AlertService {
         let level = AqiLevel.from(aqi: aqi)
         let levelName = strings.aqiLevels.indices.contains(level.rawValue) ? strings.aqiLevels[level.rawValue] : ""
         return WeatherAlert(
-            cityId: city.id, cityName: city.name, alertType: .airPollution, severity: severity,
+            cityId: sourceId, cityName: sourceName, alertType: .airPollution, severity: severity,
             message: "预计\(hoursAhead)小时后空气质量指数升至 \(aqi)（\(levelName)），请减少外出并佩戴口罩",
             detail: "AQI：\(aqi)（\(levelName)）", detectedAt: Date(), expectedTime: timeStr
         )
     }
 
-    private func checkUv(_ city: CityInfo, _ uvi: Int, _ hoursAhead: Int, _ timeStr: String, _ minSeverity: AlertSeverity, _ strings: Strings) -> WeatherAlert? {
+    private func checkUv(_ sourceId: String, _ sourceName: String, _ uvi: Int, _ hoursAhead: Int, _ timeStr: String, _ minSeverity: AlertSeverity, _ strings: Strings) -> WeatherAlert? {
         let severity: AlertSeverity
         if uvi >= AlertThresholds.uviExtreme { severity = .extreme }
         else if uvi >= AlertThresholds.uviSevere { severity = .severe }
@@ -175,7 +199,7 @@ final class AlertService {
         let level = UvLevel.from(uvi: uvi)
         let levelName = strings.uvLevels.indices.contains(level.rawValue) ? strings.uvLevels[level.rawValue] : ""
         return WeatherAlert(
-            cityId: city.id, cityName: city.name, alertType: .highUv, severity: severity,
+            cityId: sourceId, cityName: sourceName, alertType: .highUv, severity: severity,
             message: "预计\(hoursAhead)小时后紫外线指数达 \(uvi)（\(levelName)），外出请做好防晒",
             detail: "UVI：\(uvi)（\(levelName)）", detectedAt: Date(), expectedTime: timeStr
         )

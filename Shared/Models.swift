@@ -114,6 +114,27 @@ struct AppSettings: Codable, Equatable {
 
 // MARK: - 城市
 
+/// GPS 定位点（AQI/UVI 预警的唯一依据：直接用定位坐标取数，不套用已添加城市坐标）
+/// 对应 Android CurrentLocationPoint
+struct CurrentLocationPoint: Codable {
+    let latitude: Double
+    let longitude: Double
+    let name: String        // 逆地理编码得到的可读地名
+    let timestamp: Date     // 定位时刻，用于时效校验
+
+    /// 预警去重与通知用的固定 ID：坐标微动不会导致去重失效
+    static let id = "__current_location__"
+
+    /// 定位新鲜期：15 分钟内的位置视为最新，不重复发起定位
+    static let freshInterval: TimeInterval = 15 * 60
+
+    /// 定位有效期：超过 12 小时的位置不再用于 AQI/UVI 预警判定
+    static let validInterval: TimeInterval = 12 * 3600
+
+    var isFresh: Bool { Date().timeIntervalSince(timestamp) <= Self.freshInterval }
+    var isValid: Bool { Date().timeIntervalSince(timestamp) <= Self.validInterval }
+}
+
 /// 城市信息
 struct CityInfo: Codable, Equatable, Identifiable, Hashable {
     let id: String                 // 唯一标识（经纬度拼接）

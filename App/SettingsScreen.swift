@@ -9,6 +9,9 @@ struct SettingsScreen: View {
     @State private var clockOpacity: Double = 100
     @State private var weatherOpacity: Double = 100
 
+    // 当前 GPS 定位展示（AQI/UVI 预警依据），nil 表示尚未取到有效定位
+    @State private var currentLocationName: String? = nil
+
     var body: some View {
         let strings = viewModel.strings
         let settings = viewModel.settings
@@ -138,6 +141,10 @@ struct SettingsScreen: View {
                 }
 
                 if settings.alertEnabled {
+                    // 当前定位：空气质量/紫外线预警直接按该定位坐标取数，展示供用户核对
+                    SettingLabel(icon: "location.fill", title: strings.currentLocationLabel,
+                                 subtitle: currentLocationName ?? strings.currentLocationUnknown)
+
                     HStack {
                         SettingLabel(icon: "line.3.horizontal.decrease.circle.fill",
                                      title: strings.alertMinSeverity)
@@ -186,7 +193,7 @@ struct SettingsScreen: View {
 
             // ========== 关于 ==========
             Section(strings.settingsAbout) {
-                SettingLabel(icon: "info.circle.fill", title: strings.version, subtitle: "v260728.2.5.20")
+                SettingLabel(icon: "info.circle.fill", title: strings.version, subtitle: appVersion)
                 SettingLabel(icon: "chevron.left.forwardslash.chevron.right",
                              title: strings.dataSource, subtitle: "open-meteo.com")
             }
@@ -197,6 +204,26 @@ struct SettingsScreen: View {
             clockOpacity = Double(settings.clockWidgetOpacity)
             weatherOpacity = Double(settings.weatherWidgetOpacity)
         }
+        .task {
+            // 进入设置页先回显缓存定位，再尝试刷新一次，避免空白等待
+            if let cached = AppStore.shared.getCurrentLocation(), cached.isValid {
+                currentLocationName = displayName(cached, strings)
+            }
+            if let point = await LocationService.shared.refreshCurrentLocation() {
+                currentLocationName = displayName(point, strings)
+            }
+        }
+    }
+
+    /// 安装包真实版本号（读 Info.plist，避免手写字符串与构建配置脱节）
+    private var appVersion: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        return version.isEmpty ? "-" : "v\(version)"
+    }
+
+    /// 定位地名：逆查失败时回退为“当前位置”
+    private func displayName(_ point: CurrentLocationPoint, _ strings: Strings) -> String {
+        point.name.isEmpty ? strings.currentLocationFallbackName : point.name
     }
 
     /// 修改设置并持久化（内部会同步刷新小组件时间线）

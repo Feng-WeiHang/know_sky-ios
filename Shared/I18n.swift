@@ -38,6 +38,9 @@ struct Strings {
     let alertOnDesc: String
     let alertOffDesc: String
     let alertMinSeverity: String
+    let currentLocationLabel: String
+    let currentLocationUnknown: String
+    let currentLocationFallbackName: String
     let settingsData: String
     let refreshInterval: String
     let minutesUnit: String
@@ -95,6 +98,8 @@ enum I18n {
         settingsUnits: "单位", tempUnit: "温度单位", windUnit: "风速单位",
         settingsAlerts: "恶劣天气预警", alertEnable: "开启预警通知",
         alertOnDesc: "已开启，后台定期检测", alertOffDesc: "已关闭", alertMinSeverity: "最低预警等级",
+        currentLocationLabel: "当前定位", currentLocationUnknown: "未获取到定位，空气质量与紫外线预警暂不推送",
+        currentLocationFallbackName: "当前位置",
         settingsData: "数据", refreshInterval: "自动刷新间隔", minutesUnit: "分钟",
         settingsAbout: "关于", version: "版本", dataSource: "数据来源",
         settingsSystem: "系统", languageLabel: "语言", saveSettings: "保存设置", settingsSaved: "设置已保存",
@@ -140,6 +145,8 @@ enum I18n {
         settingsUnits: "單位", tempUnit: "溫度單位", windUnit: "風速單位",
         settingsAlerts: "惡劣天氣預警", alertEnable: "開啟預警通知",
         alertOnDesc: "已開啟，背景定期檢測", alertOffDesc: "已關閉", alertMinSeverity: "最低預警等級",
+        currentLocationLabel: "目前定位", currentLocationUnknown: "未取得定位，空氣品質與紫外線預警暫不推送",
+        currentLocationFallbackName: "目前位置",
         settingsData: "資料", refreshInterval: "自動重新整理間隔", minutesUnit: "分鐘",
         settingsAbout: "關於", version: "版本", dataSource: "資料來源",
         settingsSystem: "系統", languageLabel: "語言", saveSettings: "儲存設定", settingsSaved: "設定已儲存",
@@ -185,6 +192,8 @@ enum I18n {
         settingsUnits: "Units", tempUnit: "Temperature Unit", windUnit: "Wind Speed Unit",
         settingsAlerts: "Severe Weather Alerts", alertEnable: "Enable Alerts",
         alertOnDesc: "On, checked periodically in background", alertOffDesc: "Off", alertMinSeverity: "Minimum Alert Level",
+        currentLocationLabel: "Current Location", currentLocationUnknown: "Location unavailable; air quality and UV alerts are paused",
+        currentLocationFallbackName: "Current location",
         settingsData: "Data", refreshInterval: "Auto Refresh Interval", minutesUnit: "min",
         settingsAbout: "About", version: "Version", dataSource: "Data Source",
         settingsSystem: "System", languageLabel: "Language", saveSettings: "Save Settings", settingsSaved: "Settings saved",
@@ -231,6 +240,8 @@ enum I18n {
         settingsUnits: "単位", tempUnit: "温度単位", windUnit: "風速単位",
         settingsAlerts: "悪天候警報", alertEnable: "警報通知を有効化",
         alertOnDesc: "オン、バックグラウンドで定期確認", alertOffDesc: "オフ", alertMinSeverity: "最低警報レベル",
+        currentLocationLabel: "現在の位置", currentLocationUnknown: "位置を取得できません。大気質と紫外線の警報は停止中",
+        currentLocationFallbackName: "現在地",
         settingsData: "データ", refreshInterval: "自動更新間隔", minutesUnit: "分",
         settingsAbout: "情報", version: "バージョン", dataSource: "データソース",
         settingsSystem: "システム", languageLabel: "言語", saveSettings: "設定を保存", settingsSaved: "設定を保存しました",
@@ -277,6 +288,9 @@ enum I18n {
         settingsUnits: "단위", tempUnit: "온도 단위", windUnit: "풍속 단위",
         settingsAlerts: "악천후 경보", alertEnable: "경보 알림 켜기",
         alertOnDesc: "켜짐, 백그라운드에서 주기적 확인", alertOffDesc: "꺼짐", alertMinSeverity: "최소 경보 수준",
+        currentLocationLabel: "현재 위치",
+        currentLocationUnknown: "위치를 가져올 수 없어 대기질·자외선 경보가 중지됩니다",
+        currentLocationFallbackName: "현재 위치",
         settingsData: "데이터", refreshInterval: "자동 새로고침 간격", minutesUnit: "분",
         settingsAbout: "정보", version: "버전", dataSource: "데이터 출처",
         settingsSystem: "시스템", languageLabel: "언어", saveSettings: "설정 저장", settingsSaved: "설정이 저장되었습니다",
@@ -323,6 +337,9 @@ enum I18n {
         settingsUnits: "Единицы", tempUnit: "Единица температуры", windUnit: "Единица скорости ветра",
         settingsAlerts: "Штормовые предупреждения", alertEnable: "Включить уведомления",
         alertOnDesc: "Вкл., периодическая проверка в фоне", alertOffDesc: "Выкл.", alertMinSeverity: "Минимальный уровень",
+        currentLocationLabel: "Текущее местоположение",
+        currentLocationUnknown: "Местоположение недоступно, оповещения о качестве воздуха и УФ приостановлены",
+        currentLocationFallbackName: "Текущее место",
         settingsData: "Данные", refreshInterval: "Интервал автообновления", minutesUnit: "мин",
         settingsAbout: "О приложении", version: "Версия", dataSource: "Источник данных",
         settingsSystem: "Система", languageLabel: "Язык", saveSettings: "Сохранить настройки", settingsSaved: "Настройки сохранены",

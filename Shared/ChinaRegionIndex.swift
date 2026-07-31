@@ -62,6 +62,29 @@ enum ChinaRegionIndex {
         .map { toGeocodingResult($0.0) }
     }
 
+    /// 离线逆地理编码：返回距给定坐标最近的条目（区县级精度）与其球面距离
+    /// 用于 GPS 定位点的地名反查，无需联网、无接口配额限制
+    static func nearest(latitude: Double, longitude: Double) -> (name: String, admin: String, distanceKm: Double)? {
+        guard !regions.isEmpty else { return nil }
+        var best: (region: Region, distance: Double)? = nil
+        for r in regions {
+            let d = distanceKm(latitude, longitude, r.lat, r.lon)
+            if best == nil || d < best!.distance { best = (r, d) }
+        }
+        guard let hit = best else { return nil }
+        return (hit.region.name, hit.region.admin, hit.distance)
+    }
+
+    /// Haversine 球面距离（km），与 Android LocationHelper.distanceKm 一致
+    private static func distanceKm(_ lat1: Double, _ lon1: Double, _ lat2: Double, _ lon2: Double) -> Double {
+        let earthRadius = 6371.0
+        let dLat = (lat2 - lat1) * .pi / 180
+        let dLon = (lon2 - lon1) * .pi / 180
+        let a = sin(dLat / 2) * sin(dLat / 2) +
+            cos(lat1 * .pi / 180) * cos(lat2 * .pi / 180) * sin(dLon / 2) * sin(dLon / 2)
+        return 2 * earthRadius * asin(min(1, sqrt(a)))
+    }
+
     private static func toGeocodingResult(_ r: Region) -> GeocodingResult {
         GeocodingResult(
             // 负数 id 标记为离线条目（非 open-meteo geoId），toCityInfo 时不作为 geoId 使用

@@ -11,7 +11,7 @@ options:
 settings:
   base:
     MARKETING_VERSION: 20260731.3.4.29
-    CURRENT_PROJECT_VERSION: 8
+    CURRENT_PROJECT_VERSION: 9
     SWIFT_VERSION: "5.9"
     ARCHS: arm64
     TARGETED_DEVICE_FAMILY: "1"          # iPhone
