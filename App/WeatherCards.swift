@@ -457,9 +457,11 @@ struct HourlyForecastCardView: View {
 
     var body: some View {
         if !hours.isEmpty {
-            // 极值可能出现多个，按数值相等全部标色
-            let maxTemp = hours.map(\.temperature).max() ?? 0
-            let minTemp = hours.map(\.temperature).min() ?? 0
+            // 极值按“显示值”（换算单位后取整）判定：30.2° 与 30.4° 界面上都是 30°，
+            // 若按原始小数比较会漏标并列最高/最低，凡显示为极值的全部标色
+            let displayTemps = hours.map { Int(tempUnit.convert($0.temperature).rounded()) }
+            let maxTemp = displayTemps.max() ?? 0
+            let minTemp = displayTemps.min() ?? 0
             let isDark = colorScheme == .dark
             let hotColor = Color(hex: isDark ? 0xFFFF7B72 : 0xFFC62828)
             let coldColor = Color(hex: isDark ? 0xFF7FC4FF : 0xFF1565C0)
@@ -472,10 +474,11 @@ struct HourlyForecastCardView: View {
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(alignment: .top, spacing: 4) {
-                        ForEach(hours) { hour in
+                        ForEach(Array(hours.enumerated()), id: \.element.id) { index, hour in
+                            let displayTemp = displayTemps[index]
                             let tempColor: Color = {
-                                if hour.temperature == maxTemp { return hotColor }
-                                if hour.temperature == minTemp { return coldColor }
+                                if displayTemp == maxTemp { return hotColor }
+                                if displayTemp == minTemp { return coldColor }
                                 return .primary
                             }()
                             HourColumnView(
