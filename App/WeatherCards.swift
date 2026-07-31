@@ -122,6 +122,8 @@ struct AqiBarView: View {
     let strings: Strings
 
     @Environment(\.colorScheme) private var colorScheme
+    // 随机种子在 view 生命周期内稳定，避免刷新重绘时文案闪变
+    @State private var adviceSeed = Int.random(in: 0..<1024)
 
     var body: some View {
         if let aqiValue = airQuality?.aqi {
@@ -150,9 +152,11 @@ struct AqiBarView: View {
                         .background(aqiColor.opacity(0.15), in: Capsule())
                 }
 
-                // 趣味建议文案
-                if strings.aqiAdvices.indices.contains(level.rawValue) {
-                    Text(strings.aqiAdvices[level.rawValue])
+                // 趣味建议文案（同级多条中随机取一条）
+                if strings.aqiAdvices.indices.contains(level.rawValue),
+                   !strings.aqiAdvices[level.rawValue].isEmpty {
+                    let advices = strings.aqiAdvices[level.rawValue]
+                    Text(advices[adviceSeed % advices.count])
                         .font(.caption)
                         .foregroundStyle(textColor)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -192,6 +196,8 @@ struct UvBarView: View {
     let strings: Strings
 
     @Environment(\.colorScheme) private var colorScheme
+    // 同 AQI 卡：随机种子锁住本次展示的文案
+    @State private var adviceSeed = Int.random(in: 0..<1024)
 
     var body: some View {
         if let uviValue = airQuality?.uvIndex {
@@ -220,9 +226,11 @@ struct UvBarView: View {
                         .background(uvColor.opacity(0.15), in: Capsule())
                 }
 
-                // 趣味建议文案
-                if strings.uvAdvices.indices.contains(level.rawValue) {
-                    Text(strings.uvAdvices[level.rawValue])
+                // 趣味建议文案（同级多条中随机取一条）
+                if strings.uvAdvices.indices.contains(level.rawValue),
+                   !strings.uvAdvices[level.rawValue].isEmpty {
+                    let advices = strings.uvAdvices[level.rawValue]
+                    Text(advices[adviceSeed % advices.count])
                         .font(.caption)
                         .foregroundStyle(textColor)
                         .frame(maxWidth: .infinity, alignment: .leading)
