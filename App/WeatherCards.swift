@@ -246,6 +246,15 @@ struct UvBarView: View {
                     }
                 }
                 .frame(height: 8)
+
+                // 辐射强度上下限（红斑加权辐照度，1 UVI = 25 mW/m²，量程 0~11+；标注固定英文，样式同 AQI 卡 PM 行）
+                HStack {
+                    Text("Min: 0 mW/m²")
+                    Spacer()
+                    Text("Max: 275+ mW/m²")
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
             }
             .padding(16)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
