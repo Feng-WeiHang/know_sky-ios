@@ -124,6 +124,16 @@ struct HomeScreen: View {
                             .padding(.horizontal, 16)
                         }
 
+                        // 地表防灾预报（地形 + 气象多因子推演，按紧急/重要/一般排序，超高内部滚动）
+                        if !viewModel.cities.isEmpty {
+                            HazardCardView(
+                                state: viewModel.hazardState,
+                                strings: strings,
+                                language: language
+                            )
+                            .padding(.horizontal, 16)
+                        }
+
                         // 5日预报
                         let forecasts = viewModel.selectedWeather?.dayForecasts ?? []
                         if !forecasts.isEmpty {

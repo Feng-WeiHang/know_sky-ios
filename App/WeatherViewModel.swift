@@ -13,9 +13,12 @@ final class WeatherViewModel: ObservableObject {
     @Published var isRefreshing = false
     @Published var searchResults: [GeocodingResult] = []
     @Published var isSearching = false
+    /// 地表防灾预报状态（地形 + 气象多因子推演结果）
+    @Published var hazardState = HazardUiState()
 
     private let store = AppStore.shared
     private let repository = WeatherRepository.shared
+    private var hazardTask: Task<Void, Never>?
 
     /// 当前语言全部文案
     var strings: Strings { I18n.of(settings.language) }
@@ -60,6 +63,28 @@ final class WeatherViewModel: ObservableObject {
         for item in list { weatherByCity[item.city.id] = item }
         isRefreshing = false
         WidgetCenter.shared.reloadAllTimelines()
+        loadHazards(force: true)
+    }
+
+    // MARK: - 地表防灾预报
+
+    /// 推演当前城市的地表灾害；force 为 true 时跳过 30 分钟结果缓存
+    func loadHazards(force: Bool) {
+        hazardTask?.cancel()
+        guard let city = selectedCity else {
+            hazardState = HazardUiState()
+            return
+        }
+        hazardState = HazardUiState(isLoading: true)
+        hazardTask = Task {
+            let result = await HazardRepository.shared.getPredictions(city: city, forceRefresh: force)
+            if Task.isCancelled { return }
+            hazardState = HazardUiState(
+                isLoading: false,
+                predictions: result ?? [],
+                analyzed: result != nil
+            )
+        }
     }
 
     /// 数据超过刷新间隔才刷新（回到前台时调用）
@@ -75,13 +100,17 @@ final class WeatherViewModel: ObservableObject {
         selectedCityId = cityId
         store.setSelectedCityId(cityId)
         WidgetCenter.shared.reloadAllTimelines()
+        loadHazards(force: false)
     }
 
     func addCity(_ result: GeocodingResult) {
         let city = result.toCityInfo()
         store.addCity(city)
         cities = store.getCities()
-        if selectedCityId == nil { selectedCityId = city.id }
+        if selectedCityId == nil {
+            selectedCityId = city.id
+            loadHazards(force: false)
+        }
         Task {
             if let data = try? await repository.fetchCityWeather(city) {
                 weatherByCity[city.id] = data
@@ -97,7 +126,10 @@ final class WeatherViewModel: ObservableObject {
         store.removeCity(cityId)
         cities = store.getCities()
         weatherByCity.removeValue(forKey: cityId)
-        if selectedCityId == cityId { selectedCityId = cities.first?.id }
+        if selectedCityId == cityId {
+            selectedCityId = cities.first?.id
+            loadHazards(force: false)
+        }
         WidgetCenter.shared.reloadAllTimelines()
     }
 
